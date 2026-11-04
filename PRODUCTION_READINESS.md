@@ -27,7 +27,10 @@ Alembic migrations และ automated tests/CI
 
 ## ผลตรวจใน workspace (2026-11-04)
 
-- PostgreSQL ชั่วคราวที่มีเฉพาะข้อมูลสมมติ: **23 passed** รวม concurrent sale/payment
+- PostgreSQL 16.2 ชั่วคราวที่มีเฉพาะข้อมูลสมมติ: **25 passed** รวม concurrent sale/payment
 - Alembic: upgrade → schema check ไม่มี drift → downgrade base → upgrade ผ่าน
 - Ruff lint / format check และ git diff --check ผ่าน
 - ผล GitHub Actions ให้ดู run บน branch/PR โดยตรง; ผล local ข้างต้นไม่ใช่การรับรอง Production
+
+- GitHub ปฏิเสธ git push และ connector create_branch ด้วย 403 Resource not accessible by integration; branch/commits ยังอยู่ local เท่านั้น ยังไม่ได้รัน GitHub Actions หรือเปิด PR
+- ตรวจ remote main แล้วยังคงเป็น `d54b3721339a25d132682509438332c6a3826d3f` ตรงกับก่อนเริ่มงาน

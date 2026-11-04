@@ -173,3 +173,41 @@ def test_login_throttling():
         post(client, token, "/auth/login", {"username": "absent", "password": "wrong"}).status_code for _ in range(6)
     ]
     assert codes == [401, 401, 401, 401, 401, 429]
+
+
+def test_business_roles_can_complete_sale_and_payment(client, seeded):
+    _, pid, cid = seeded
+    warehouse = login(client, "warehouse")
+    assert (
+        post(
+            client, warehouse, "/stock/adjustments", {"product_id": pid, "delta": 1, "reason": "Synthetic receipt"}
+        ).status_code
+        == 200
+    )
+    sales = login(client, "sales")
+    sale = post(client, sales, "/sales", {"customer_id": cid, "lines": [{"product_id": pid, "quantity": 1}]})
+    assert sale.status_code == 201
+    accountant = login(client, "accountant")
+    assert (
+        post(
+            client,
+            accountant,
+            f"/sales/{sale.json['id']}/payments",
+            {"amount": "107.00", "reference": "role-flow-test"},
+        ).json["balance"]
+        == "0.00"
+    )
+
+
+def test_conflict_and_malformed_input(client, seeded):
+    token, _, _ = seeded
+    assert (
+        post(client, token, "/products", {"sku": "TEST-001", "name": "Duplicate", "price": "1.00"}).status_code == 409
+    )
+    assert (
+        post(client, token, "/customers", {"name": "Test", "address": "Test", "tax_id": "not-a-tax-id"}).status_code
+        == 400
+    )
+    assert post(client, token, "/customers", []).status_code == 400
+    assert post(client, token, "/sales", {"customer_id": 999999, "lines": []}).status_code == 404
+    assert client.get("/products").status_code == 200
