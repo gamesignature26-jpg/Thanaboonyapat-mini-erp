@@ -106,7 +106,13 @@ def create_app(config=None):
             {
                 "X-Content-Type-Options": "nosniff",
                 "X-Frame-Options": "DENY",
-                "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'",
+                "Content-Security-Policy": (
+                    "default-src 'self'; script-src 'self'; style-src 'self'; "
+                    "connect-src 'self'; img-src 'self' data:; "
+                    "base-uri 'none'; object-src 'none'; frame-ancestors 'none'"
+                    if request.path == "/app"
+                    else "default-src 'none'; frame-ancestors 'none'"
+                ),
                 "Cache-Control": "no-store",
                 "Referrer-Policy": "no-referrer",
             }
@@ -350,5 +356,9 @@ def create_app(config=None):
         sale.paid += amount
         db.session.commit()
         return {"paid": str(sale.paid), "balance": str(sale.total - sale.paid)}, 201
+
+    from .online import install_online
+
+    install_online(app)
 
     return app

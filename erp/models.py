@@ -11,6 +11,7 @@ class User(db.Model):
     username = db.Column(db.String(80), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
     role = db.Column(db.String(20), nullable=False)
+    session_version = db.Column(db.Integer, nullable=False, default=0)
     active = db.Column(db.Boolean, nullable=False, default=True)
     __table_args__ = (CheckConstraint("role IN ('admin','sales','warehouse','accountant')"),)
 
@@ -32,6 +33,7 @@ class Customer(db.Model):
 
 
 class Sale(db.Model):
+    request_key = db.Column(db.String(100), unique=True)
     id = db.Column(db.Integer, primary_key=True)
     customer_id = db.Column(db.ForeignKey("customer.id"), nullable=False)
     customer_name = db.Column(db.String(200), nullable=False)
