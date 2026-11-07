@@ -188,6 +188,26 @@ def create_app(config=None):
         add_user(username.strip(), password, "admin")
         click.echo("Admin created")
 
+    @app.cli.command("bootstrap-admin")
+    def bootstrap_admin():
+        """Create a configured admin once, without changing an existing account."""
+        username = os.getenv("BOOTSTRAP_ADMIN_USERNAME")
+        password = os.getenv("BOOTSTRAP_ADMIN_PASSWORD")
+        if username is None and password is None:
+            return
+        if not username or not password:
+            raise click.ClickException("Set both bootstrap credentials or neither")
+        username = username.strip()
+        if not username or len(username) > 80:
+            raise click.ClickException("Invalid username")
+        if not 12 <= len(password) <= 128:
+            raise click.ClickException("Invalid password")
+        if db.session.scalar(db.select(User).where(User.username == username)):
+            click.echo("Admin bootstrap complete")
+            return
+        add_user(username, password, "admin")
+        click.echo("Admin bootstrap complete")
+
     @app.post("/users")
     @roles()
     def users():
