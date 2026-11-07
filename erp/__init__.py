@@ -193,7 +193,7 @@ def create_app(config=None):
         """Create a configured admin once, without changing an existing account."""
         username = os.getenv("BOOTSTRAP_ADMIN_USERNAME")
         password = os.getenv("BOOTSTRAP_ADMIN_PASSWORD")
-        if username is None and password is None:
+        if not username and not password:
             return
         if not username or not password:
             raise click.ClickException("Set both bootstrap credentials or neither")
