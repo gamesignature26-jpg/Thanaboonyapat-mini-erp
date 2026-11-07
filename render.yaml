@@ -7,7 +7,7 @@ services:
     branch: feature/thanabunyapat-online
     buildCommand: pip install -r requirements.txt
     startCommand: >-
-      DATABASE_URL="$(printf '%s' "$DATABASE_URL" | sed -e 's#^postgres://#postgresql+psycopg://#' -e 's#^postgresql://#postgresql+psycopg://')"; export DATABASE_URL; flask --app erp db upgrade && exec gunicorn --bind 0.0.0.0:${PORT} 'erp:create_app()'
+      DATABASE_URL="$(printf '%s' "$DATABASE_URL" | sed -e 's#^postgres://#postgresql+psycopg://#' -e 's#^postgresql://#postgresql+psycopg://#')"; export DATABASE_URL; flask --app erp db upgrade && exec gunicorn --bind 0.0.0.0:${PORT} 'erp:create_app()'
     healthCheckPath: /health
     envVars:
       - key: SECRET_KEY
