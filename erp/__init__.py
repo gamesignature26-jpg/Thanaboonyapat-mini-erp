@@ -119,7 +119,7 @@ def create_app(config=None):
                     else "default-src 'none'; frame-ancestors 'none'"
                 ),
                 "Cache-Control": "no-store",
-                "Referrer-Policy": "no-referrer",
+                "Referrer-Policy": "same-origin",
             }
         )
         if request.is_secure:
