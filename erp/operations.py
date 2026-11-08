@@ -240,7 +240,7 @@ def install_operations(app):
             }
         body = data()
         address = text(body, "email", 254).lower()
-        if not re.fullmatch(r"[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+", address):
+        if not re.fullmatch(r"[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,63}", address):
             abort(400, "Invalid email")
         if not check_password_hash(g.user.password_hash, text(body, "current_password", 128)):
             abort(403, "Current password required")

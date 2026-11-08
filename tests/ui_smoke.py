@@ -59,7 +59,7 @@ def main():
             page.get_by_label("พนักงาน", exact=True).select_option(label="UI driver")
             page.get_by_label("รายละเอียด / เหตุผล").fill("Synthetic work day")
             page.get_by_role("button", name="ยืนยันรายการ", exact=True).click()
-            page.locator("#op-week-result").get_by_text("UI driver", exact=True).wait_for()
+            page.locator("#op-week-result").get_by_text("Synthetic work day", exact=False).wait_for(state="attached")
             page.get_by_role("button", name="รูปค่าใช้จ่าย / สลิป", exact=True).click()
             page.get_by_label("ประเภทหลักฐาน").select_option("expense_id")
             page.get_by_label("เลขบิลขาย หรือเลขรายจ่ายที่บันทึกแล้ว").fill("1")

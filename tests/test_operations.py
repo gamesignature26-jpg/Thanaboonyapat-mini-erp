@@ -181,6 +181,9 @@ def test_email_verify_single_use_and_weekly_once(client, app, monkeypatch):
 def test_email_provider_failure_and_no_staff_financial_subscription(client, app, monkeypatch):
     token = login(client, "sales")
     body = {"email": "staff@example.test", "current_password": "synthetic-password-only", "weekly": False}
+    assert (
+        post(client, token, "/api/operations/email", {**body, "email": "other,staff@example.test"}).status_code == 400
+    )
     assert post(client, token, "/api/operations/email", body).status_code == 503
     configure_mail(app)
     assert post(client, token, "/api/operations/email", {**body, "weekly": True}).status_code == 403
