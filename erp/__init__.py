@@ -1,3 +1,4 @@
+import hashlib
 import os
 import secrets
 from datetime import timedelta
@@ -59,7 +60,11 @@ def roles(*allowed):
         @wraps(fn)
         def wrapped(*args, **kwargs):
             user = db.session.get(User, session.get("uid")) if session.get("uid") else None
-            if not user or not user.active:
+            if (
+                not user
+                or not user.active
+                or session.get("password_version") != hashlib.sha256(user.password_hash.encode()).hexdigest()
+            ):
                 abort(401)
             if user.role != "admin" and user.role not in allowed:
                 abort(403)
@@ -154,8 +159,27 @@ def create_app(config=None):
             abort(401, "Invalid credentials")
         session.clear()
         session["uid"] = user.id
+        session["password_version"] = hashlib.sha256(user.password_hash.encode()).hexdigest()
         session.permanent = True
         return {"role": user.role, "csrf_token": generate_csrf()}
+
+    @app.post("/auth/register")
+    @limiter.limit("3 per hour")
+    def register():
+        """Accept a staff access request without granting access automatically."""
+        body = data()
+        username = text(body, "username", 80)
+        password = body.get("password")
+        if not isinstance(password, str) or not 12 <= len(password) <= 128:
+            abort(400, "Password must be 12–128 characters")
+        # Return the same result for an existing name to avoid account enumeration.
+        if db.session.scalar(db.select(User.id).where(User.username == username)):
+            return "", 202
+        db.session.add(
+            User(username=username, password_hash=generate_password_hash(password), role="sales", active=False)
+        )
+        db.session.commit()
+        return "", 202
 
     app.config["DUMMY_HASH"] = generate_password_hash(secrets.token_urlsafe(32))
 
@@ -208,12 +232,42 @@ def create_app(config=None):
         add_user(username, password, "admin")
         click.echo("Admin bootstrap complete")
 
-    @app.post("/users")
+    @app.route("/users", methods=["GET", "POST"])
     @roles()
     def users():
+        if request.method == "GET":
+            return {
+                "items": [
+                    {"id": user.id, "username": user.username, "role": user.role, "active": user.active}
+                    for user in db.session.scalars(db.select(User).order_by(User.active, User.username).limit(200))
+                ]
+            }
         body = data()
         user = add_user(text(body, "username", 80), body.get("password"), body.get("role"))
         return {"id": user.id}, 201
+
+    @app.post("/users/<int:user_id>/activate")
+    @roles()
+    def activate_user(user_id):
+        user = db.get_or_404(User, user_id)
+        user.active = True
+        db.session.commit()
+        return {"id": user.id, "active": user.active}
+
+    @app.post("/users/<int:user_id>/password")
+    @roles()
+    def reset_user_password(user_id):
+        """Let the owner reset a staff password without exposing the old one."""
+        body = data()
+        password = body.get("password")
+        if not isinstance(password, str) or not 12 <= len(password) <= 128:
+            abort(400, "Password must be 12–128 characters")
+        user = db.get_or_404(User, user_id)
+        user.password_hash = generate_password_hash(password)
+        if user.id == g.user.id:
+            session["password_version"] = hashlib.sha256(user.password_hash.encode()).hexdigest()
+        db.session.commit()
+        return "", 204
 
     @app.route("/products", methods=["GET", "POST"])
     @roles("sales", "warehouse", "accountant")

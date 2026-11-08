@@ -3,8 +3,8 @@
 'use strict';
 const root = document.getElementById('root');
 const toast = document.getElementById('toast');
-const state = {user:null,csrf:null,view:'dashboard',products:[],customers:[],sales:[],orders:[],expenses:[],summary:null,cart:new Map(),wh:[],vatRate:7,busy:false};
-const labels = {dashboard:'ภาพรวมธุรกิจ',pos:'ขายหน้าร้าน POS',wholesale:'ขายส่ง / จัดส่ง',sales:'บิลขาย / ลูกหนี้',inventory:'สินค้าและสต๊อก',customers:'ลูกค้า',expenses:'ค่าใช้จ่าย',reports:'รายงาน'};
+const state = {user:null,csrf:null,view:'dashboard',products:[],customers:[],sales:[],orders:[],expenses:[],users:[],summary:null,cart:new Map(),wh:[],vatRate:7,busy:false};
+const labels = {dashboard:'ภาพรวมธุรกิจ',pos:'ขายหน้าร้าน POS',wholesale:'ขายส่ง / จัดส่ง',sales:'บิลขาย / ลูกหนี้',inventory:'สินค้าและสต๊อก',customers:'ลูกค้า',expenses:'ค่าใช้จ่าย',reports:'รายงาน',users:'ผู้ใช้งาน'};
 const $=id=>document.getElementById(id);
 const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmt=x=>x===null||x===undefined?'—':new Intl.NumberFormat('th-TH',{style:'currency',currency:'THB'}).format(Number(x||0));
@@ -28,7 +28,9 @@ async function api(path,options={}){
  return json;
 }
 async function getCsrf(){const r=await fetch('/auth/csrf',{credentials:'same-origin'});if(!r.ok)throw Error('ไม่สามารถขอ CSRF token');state.csrf=(await r.json()).csrf_token;}
-function showLogin(){root.innerHTML=`<div class="login-page"><div class="card login"><div class="row"><div class="logo">TB</div><h1>Thanabunyapat One</h1></div><p>ระบบขายและจัดส่งออนไลน์ · หจก. ธนาบุณยภัทร</p><form id="login-form">${field('ชื่อผู้ใช้','username','text','', 'autocomplete="username" required maxlength="80"')}${field('รหัสผ่าน','password','password','','autocomplete="current-password" required')}<button class="btn block">เข้าสู่ระบบ</button></form><div class="small-note">ระบบทดสอบที่เชื่อมฐานข้อมูลกลาง ไม่ใช่ระบบบัญชีคู่หรือใบกำกับภาษีที่ใช้ตามกฎหมาย</div></div></div>`;}
+function showLogin(){root.innerHTML=`<div class="login-page"><div class="card login"><div class="row"><div class="logo">TB</div><h1>Thanabunyapat One</h1></div><p>ระบบขายและจัดส่งออนไลน์ · หจก. ธนาบุณยภัทร</p><form id="login-form">${field('ชื่อผู้ใช้','username','text','', 'autocomplete="username" required maxlength="80"')}${field('รหัสผ่าน','password','password','','autocomplete="current-password" required')}<button class="btn block">เข้าสู่ระบบ</button></form><button class="btn secondary block" id="show-register" type="button">ลงทะเบียนพนักงาน</button><button class="btn secondary block" id="show-forgot" type="button">ลืมรหัสผ่าน</button><div class="small-note">บัญชีใหม่ต้องได้รับอนุมัติจากเจ้าของก่อนใช้งาน ระบบทดสอบนี้ไม่ใช่ระบบบัญชีคู่หรือใบกำกับภาษีตามกฎหมาย</div></div></div>`;}
+function showRegister(){root.innerHTML=`<div class="login-page"><div class="card login"><div class="row"><div class="logo">TB</div><h1>สมัครสมาชิก</h1></div><p>ส่งคำขอเพื่อใช้งานระบบขายและจัดส่ง</p><form id="register-form">${field('ชื่อผู้ใช้','username','text','', 'autocomplete="username" required maxlength="80"')}${field('รหัสผ่าน','password','password','','autocomplete="new-password" required minlength="12" maxlength="128"')}${field('ยืนยันรหัสผ่าน','confirm_password','password','','autocomplete="new-password" required minlength="12" maxlength="128"')}<button class="btn block">ส่งคำขอสมัคร</button></form><button class="btn secondary block" id="show-login" type="button">กลับไปเข้าสู่ระบบ</button><div class="small-note">หลังส่งคำขอ ผู้ดูแลระบบต้องอนุมัติก่อนจึงจะเข้าสู่ระบบได้</div></div></div>`;}
+function showForgot(){root.innerHTML=`<div class="login-page"><div class="card login"><div class="row"><div class="logo">TB</div><h1>ลืมรหัสผ่าน</h1></div><p>เพื่อป้องกันคนอื่นยึดบัญชี พนักงานต้องขอให้เจ้าของระบบรีเซ็ตรหัสจากเมนู “ผู้ใช้งาน”</p><p class="small-note">แจ้งชื่อผู้ใช้แก่เจ้าของเท่านั้น ห้ามส่งรหัสผ่านเดิมหรือรหัสใหม่ผ่านแชต</p><button class="btn secondary block" id="show-login" type="button">กลับไปเข้าสู่ระบบ</button></div></div>`;}
 function navItems(){const role=state.user.role;const allowed={admin:Object.keys(labels),sales:['dashboard','pos','wholesale','sales','inventory','customers','reports'],warehouse:['dashboard','wholesale','inventory','reports'],accountant:['dashboard','wholesale','sales','inventory','customers','expenses','reports']}[role]||['dashboard'];return Object.entries(labels).filter(([v])=>allowed.includes(v)).map(([v,t])=>`<button type="button" data-nav="${v}" class="${state.view===v?'active':''}">${esc(t)}</button>`).join('');}
 function shell(){root.innerHTML=`<div class="layout"><aside><div class="brand"><div class="logo">TB</div><div><strong>THANABUNYAPAT</strong><small>ONE · ออนไลน์</small></div></div><div class="nav" id="nav">${navItems()}</div><div class="foot">ข้อมูลกลางบนเซิร์ฟเวอร์<br>ใช้เฉพาะบัญชีพนักงานที่ได้รับอนุญาต</div></aside><main><header><div><div class="muted">SMART BUSINESS WORKSPACE</div><h1 id="title">${labels[state.view]}</h1></div><div class="row"><span class="pill">● SERVER MODE</span><button class="btn secondary slim" id="logout">ออกจากระบบ</button></div></header><div class="alert"><b>ระบบทดลองก่อนเปิดจริง</b> — ห้ามใช้ใบสรุปการขายแทนใบกำกับภาษี และต้องตรวจสอบการตั้งค่า HTTPS ฐานข้อมูล การสำรองข้อมูล และสิทธิ์พนักงานก่อนใช้งานจริง</div><div id="view"></div></main></div>`;}
 async function refresh(){
@@ -37,11 +39,13 @@ async function refresh(){
   const needs=state.view;
   const base=['dashboard','reports','pos','wholesale','sales','inventory','customers'].includes(needs);
   if(base){
-   const results=await Promise.allSettled([api('/products'),api('/customers'),api('/api/online/dashboard'),api('/api/online/sales'),api('/api/online/orders'),api('/api/online/config')]);
+  const requests=[api('/products'),api('/customers'),api('/api/online/dashboard'),api('/api/online/sales'),api('/api/online/orders'),api('/api/online/config')];if(state.user.role==='admin')requests.push(api('/users'));
+  const results=await Promise.allSettled(requests);
    const keys=['products','customers','summary','sales','orders','vatRate'];
-   results.forEach((res,i)=>{if(res.status==='fulfilled')state[keys[i]]=i===2?res.value:i===5?Number(res.value.vat_rate):res.value.items;else if(!String(res.reason).includes('401'))console.warn(keys[i],res.reason);});
+   results.slice(0,6).forEach((res,i)=>{if(res.status==='fulfilled')state[keys[i]]=i===2?res.value:i===5?Number(res.value.vat_rate):res.value.items;else if(!String(res.reason).includes('401'))console.warn(keys[i],res.reason);});if(state.user.role==='admin'&&results[6]?.status==='fulfilled')state.users=results[6].value.items;
   }
   if(needs==='expenses')state.expenses=(await api('/api/online/expenses')).items;
+  if(needs==='users'&&state.user.role==='admin')state.users=(await api('/users')).items;
   render();
  }catch(err){warn(err.message);}
 }
@@ -60,7 +64,9 @@ function inventory(){const canWrite=['admin','warehouse'].includes(state.user.ro
 function customers(){return `<div class="grid g2"><div class="card"><h2>เพิ่มลูกค้า</h2><form id="customer-form">${field('ชื่อร้านค้า / ลูกค้า','name','text','','required maxlength="200"')}${field('ที่อยู่','address','text','','required maxlength="1000"')}${field('เลขผู้เสียภาษี 13 หลัก (ถ้ามี)','tax_id','text','','pattern="[0-9]{13}" maxlength="13"')}<button class="btn">บันทึกลูกค้า</button></form></div><div class="card"><h2>ลูกค้าทั้งหมด</h2><div class="tablewrap"><table><tbody>${state.customers.map(c=>`<tr><td><b>${esc(c.name)}</b><div class="muted">${esc(c.address)}</div></td></tr>`).join('')}</tbody></table></div></div></div>`;}
 function expenses(){return `<div class="grid g2"><div class="card"><h2>บันทึกค่าใช้จ่าย</h2><p>ใช้ติดตามรายจ่าย ไม่ใช่ลงบัญชีคู่</p><form id="expense-form">${field('หมวดหมู่','category','text','ขนส่ง','required maxlength="80"')}${field('รายละเอียด','description','text','','required maxlength="250"')}${field('จำนวนเงิน (บาท)','amount','number','','min="0.01" step="0.01" required')}<div class="field"><label>ชำระโดย</label><select name="method">${opt('cash','เงินสด')}${opt('transfer','โอนเงิน')}</select></div><button class="btn">บันทึกรายจ่าย</button></form></div><div class="card"><h2>รายจ่ายล่าสุด</h2><div class="tablewrap"><table><tbody>${state.expenses.map(x=>`<tr><td>${esc(x.category)}<div class="muted">${esc(x.description)}</div></td><td class="num">${fmt(x.amount)}</td></tr>`).join('')}</tbody></table></div></div></div>`;}
 function reports(){const s=state.summary||{};return `${summary()}<div class="card"><h2>รายงานการจัดส่งและค่าใช้จ่าย</h2><div class="grid g2">${card('รอส่งสินค้า',String(s.pending_delivery||0),'สถานะยังไม่สิ้นสุด')}${card('รายจ่ายที่บันทึก',fmt(s.expenses_total),'ไม่รวมต้นทุนสินค้าขาย')}</div><div class="alert">ยังไม่มีระบบต้นทุนสินค้า กำไรขาดทุนบัญชีคู่ งบการเงิน และรายงานภาษีที่ผ่านการรับรอง ห้ามนำยอดรวมนี้ไปอ้างว่าเป็นกำไรสุทธิ</div></div>`;}
-function render(){if(!state.user)return;const view=$('view');if(!view)return;const map={dashboard,pos,wholesale,sales,inventory,customers,expenses,reports};view.innerHTML=(map[state.view]||dashboard)();const t=$('title');if(t)t.textContent=labels[state.view];const nav=$('nav');if(nav)nav.innerHTML=navItems();}
+function users(){if(state.user.role!=='admin')return '<div class="alert">ไม่มีสิทธิ์เข้าถึง</div>';const rows=state.users.map(u=>`<tr><td>${esc(u.username)}</td><td>${esc(u.role)}</td><td>${u.active?'<span class="status">ใช้งานแล้ว</span>':'<span class="status pending">รออนุมัติ</span>'}</td><td><div class="row">${u.active?'':`<button class="btn slim" data-activate="${u.id}">อนุมัติ</button>`}<button class="btn secondary slim" data-reset="${u.id}">ตั้งรหัสใหม่</button></div></td></tr>`).join('');return `<div class="card"><h2>คำขอใช้งานและผู้ใช้งาน</h2><p>เจ้าของอนุมัติพนักงาน และตั้งรหัสใหม่ให้พนักงานหรือบัญชีตัวเองได้จากหน้านี้</p><div class="tablewrap"><table><thead><tr><th>ชื่อผู้ใช้</th><th>บทบาท</th><th>สถานะ</th><th></th></tr></thead><tbody>${rows||'<tr><td colspan="4" class="empty">ยังไม่มีผู้ใช้งาน</td></tr>'}</tbody></table></div></div>`;}
+function render(){if(!state.user)return;const view=$('view');if(!view)return;const map={dashboard,pos,wholesale,sales,inventory,customers,expenses,reports,users};view.innerHTML=(map[state.view]||dashboard)();const t=$('title');if(t)t.textContent=labels[state.view];const nav=$('nav');if(nav)nav.innerHTML=navItems();}
+function showReset(id){const user=state.users.find(x=>x.id===Number(id));if(!user)return;const el=$('view');el.insertAdjacentHTML('afterbegin',`<div class="card"><h2>ตั้งรหัสใหม่: ${esc(user.username)}</h2><form id="reset-password-form"><input type="hidden" name="user_id" value="${user.id}">${field('รหัสผ่านใหม่','password','password','','autocomplete="new-password" required minlength="12" maxlength="128"')}${field('ยืนยันรหัสผ่านใหม่','confirm_password','password','','autocomplete="new-password" required minlength="12" maxlength="128"')}<button class="btn">บันทึกรหัสใหม่</button></form><div class="small-note">ให้ส่งรหัสใหม่แก่พนักงานผ่านช่องทางส่วนตัวเท่านั้น</div></div>`);window.scrollTo({top:0,behavior:'smooth'});}
 async function doLogin(form){const values=f(form);await getCsrf();const r=await api('/auth/login',{method:'POST',body:{username:values.username,password:values.password}});state.csrf=r.csrf_token;state.user=await api('/auth/me');shell();await refresh();}
 async function confirmSale(kind,form){
  const v=f(form);
@@ -85,6 +91,8 @@ async function confirmSale(kind,form){
 async function send(form){if(state.busy)return;state.busy=true;const submit=form.querySelector('button[type=submit],button:not([type])');if(submit)submit.disabled=true;try{
  const id=form.id,v=f(form);
  if(id==='login-form')await doLogin(form);
+ else if(id==='register-form'){if(v.password!==v.confirm_password)throw Error('รหัสผ่านยืนยันไม่ตรงกัน');await api('/auth/register',{method:'POST',body:{username:v.username,password:v.password}});showLogin();warn('ส่งคำขอสมัครแล้ว รอผู้ดูแลอนุมัติ');}
+ else if(id==='reset-password-form'){if(v.password!==v.confirm_password)throw Error('รหัสผ่านยืนยันไม่ตรงกัน');await api(`/users/${Number(v.user_id)}/password`,{method:'POST',body:{password:v.password}});warn('ตั้งรหัสใหม่แล้ว');render();}
  else if(id==='pos-form')await confirmSale('pos',form);
  else if(id==='wh-form')await confirmSale('wholesale',form);
  else if(id==='wh-add-form'){const p=state.products.find(x=>x.id===Number(v.product_id));const qty=Number(v.quantity);const price=Number(v.unit_price);if(!p||!Number.isInteger(qty)||qty<1||qty>p.stock||!Number.isFinite(price)||price<=0)throw Error('ตรวจสอบสินค้า จำนวนและราคาขายส่ง');const found=state.wh.find(x=>x.product_id===p.id);if(found)throw Error('รายการสินค้าซ้ำ โปรดลบรายการเดิมก่อน');state.wh.push({product_id:p.id,quantity:qty,unit_price:moneyInput(price)});render();}
@@ -107,6 +115,9 @@ document.addEventListener('click',async event=>{
  const btn=event.target.closest('button');if(!btn)return;
  try{
  if(btn.dataset.nav){navigate(btn.dataset.nav);return;}
+ if(btn.id==='show-register'){showRegister();return;}
+ if(btn.id==='show-forgot'){showForgot();return;}
+ if(btn.id==='show-login'){showLogin();return;}
  if(btn.id==='logout'){await api('/auth/logout',{method:'POST',body:{}});state.user=null;state.csrf=null;showLogin();return;}
  if(btn.dataset.add){const id=Number(btn.dataset.add);const p=state.products.find(p=>p.id===id);if(!p)return;const qty=state.cart.get(id)||0;if(qty>=p.stock)throw Error('สินค้าไม่พอ');state.cart.set(id,qty+1);render();return;}
  if(btn.dataset.dec){const id=Number(btn.dataset.dec),qty=(state.cart.get(id)||0)-1;if(qty<=0)state.cart.delete(id);else state.cart.set(id,qty);render();return;}
@@ -115,6 +126,8 @@ document.addEventListener('click',async event=>{
  if(btn.dataset.pay){showPayment(btn.dataset.pay);return;}
  if(btn.dataset.print){await printSale(btn.dataset.print);return;}
  if(btn.dataset.note){await printDelivery(btn.dataset.note);return;}
+ if(btn.dataset.activate){await api(`/users/${Number(btn.dataset.activate)}/activate`,{method:'POST',body:{}});warn('อนุมัติผู้ใช้งานแล้ว');await refresh();return;}
+ if(btn.dataset.reset){showReset(btn.dataset.reset);return;}
  }catch(err){warn(err.message);}
 });
 document.addEventListener('change',evt=>{if(evt.target.name==='product_id'&&evt.target.closest('#wh-add-form')){const p=state.products.find(p=>p.id===Number(evt.target.value));const price=document.querySelector('#wh-add-form [name="unit_price"]');if(price)price.value=p?moneyInput(p.price):'';}});

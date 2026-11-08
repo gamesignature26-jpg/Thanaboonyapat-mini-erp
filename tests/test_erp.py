@@ -156,6 +156,50 @@ def test_user_creation_and_disabled_account(client, app):
     assert client.get("/auth/me").status_code == 401
 
 
+def test_public_registration_requires_admin_approval(client, app):
+    csrf = client.get("/auth/csrf").json["csrf_token"]
+    response = post(client, csrf, "/auth/register", {"username": "pending-sales", "password": "synthetic-password"})
+    assert response.status_code == 202
+    with app.app_context():
+        pending = db.session.scalar(db.select(User).where(User.username == "pending-sales"))
+        assert pending.role == "sales"
+        assert pending.active is False
+        assert pending.password_hash != "synthetic-password"
+    csrf = client.get("/auth/csrf").json["csrf_token"]
+    assert (
+        post(client, csrf, "/auth/login", {"username": "pending-sales", "password": "synthetic-password"}).status_code
+        == 401
+    )
+    token = login(client)
+    listed = client.get("/users").json["items"]
+    assert any(item["username"] == "pending-sales" and not item["active"] for item in listed)
+    assert post(client, token, f"/users/{pending.id}/activate", {}).json["active"] is True
+    other = app.test_client()
+    other_csrf = other.get("/auth/csrf").json["csrf_token"]
+    assert (
+        post(
+            other, other_csrf, "/auth/login", {"username": "pending-sales", "password": "synthetic-password"}
+        ).status_code
+        == 200
+    )
+
+
+def test_admin_can_reset_a_staff_password(client, app):
+    token = login(client)
+    created = post(client, token, "/users", {"username": "reset-me", "password": "synthetic-password", "role": "sales"})
+    assert created.status_code == 201
+    assert (
+        post(client, token, f"/users/{created.json['id']}/password", {"password": "new-synthetic-password"}).status_code
+        == 204
+    )
+    other = app.test_client()
+    csrf = other.get("/auth/csrf").json["csrf_token"]
+    assert (
+        post(other, csrf, "/auth/login", {"username": "reset-me", "password": "new-synthetic-password"}).status_code
+        == 200
+    )
+
+
 def test_login_throttling():
     app = create_app(
         {
