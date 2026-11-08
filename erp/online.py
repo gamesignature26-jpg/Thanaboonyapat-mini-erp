@@ -134,8 +134,8 @@ def config():
 
 @bp.post("/api/online/orders")
 @roles("sales")
-def create_order():
-    body = data()
+def create_order(body_override=None, before_commit=None):
+    body = data() if body_override is None else body_override
     key = text(body, "idempotency_key", 80)
     request_hash = hashlib.sha256(
         json.dumps(body, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
@@ -257,6 +257,8 @@ def create_order():
         db.session.flush()
         db.session.add(OnlinePaymentMethod(payment_id=payment.id, method=method))
         sale.paid = total
+    if before_commit:
+        before_commit(sale)
     db.session.commit()
     return {"id": sale.id, "total": money_json(total), "vat": money_json(vat), "duplicate": False}, 201
 

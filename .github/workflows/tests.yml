@@ -39,8 +39,16 @@ jobs:
       - run: flask --app erp db downgrade base
       - run: flask --app erp db upgrade
       - run: python -m pytest -q --junitxml=test-results.xml
+      - run: pip install playwright==1.62.0
+      - run: python -m playwright install --with-deps chromium
+      - run: PYTHONPATH=. python tests/ui_smoke.py
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: test-results
           path: test-results.xml
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ui-operations-mobile
+          path: ui-operations-mobile.png

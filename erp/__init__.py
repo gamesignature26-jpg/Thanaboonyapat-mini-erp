@@ -36,6 +36,8 @@ def money(value):
 
 
 def data():
+    if request.content_length and request.content_length > 65536:
+        abort(413)
     body = request.get_json()
     if not isinstance(body, dict):
         abort(400, "Expected JSON object")
@@ -85,7 +87,7 @@ def create_app(config=None):
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Lax",
         PERMANENT_SESSION_LIFETIME=timedelta(minutes=30),
-        MAX_CONTENT_LENGTH=65536,
+        MAX_CONTENT_LENGTH=4 * 1024 * 1024,
         RATELIMIT_STORAGE_URI=os.getenv("RATELIMIT_STORAGE_URI", "memory://"),
         VAT_RATE=os.getenv("VAT_RATE", "7.00"),
     )
@@ -437,5 +439,9 @@ def create_app(config=None):
     from .recovery import install_recovery
 
     install_recovery(app)
+
+    from .operations import install_operations
+
+    install_operations(app)
 
     return app
