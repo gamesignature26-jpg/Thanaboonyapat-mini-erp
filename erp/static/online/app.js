@@ -131,5 +131,5 @@ document.addEventListener('click',async event=>{
  }catch(err){warn(err.message);}
 });
 document.addEventListener('change',evt=>{if(evt.target.name==='product_id'&&evt.target.closest('#wh-add-form')){const p=state.products.find(p=>p.id===Number(evt.target.value));const price=document.querySelector('#wh-add-form [name="unit_price"]');if(price)price.value=p?moneyInput(p.price):'';}});
-(async()=>{try{state.user=await api('/auth/me');await getCsrf();shell();await refresh();}catch(_){showLogin();}})();
+(async()=>{if(location.hash.startsWith('#recover='))return;try{state.user=await api('/auth/me');await getCsrf();shell();await refresh();}catch(_){showLogin();}})();
 })();

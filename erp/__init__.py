@@ -434,5 +434,8 @@ def create_app(config=None):
     from .online import install_online
 
     install_online(app)
+    from .recovery import install_recovery
+
+    install_recovery(app)
 
     return app
