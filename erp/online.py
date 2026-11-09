@@ -14,6 +14,7 @@ from flask import Blueprint, abort, current_app, g, render_template, request
 from sqlalchemy import CheckConstraint, func
 
 from . import data, integer, money, roles, text
+from .extended import CustomerPrice
 from .models import Customer, Payment, Product, Sale, SaleLine, StockMovement, db
 
 CENT = Decimal("0.01")
@@ -169,7 +170,7 @@ def create_order(body_override=None, before_commit=None):
         if pid in requested:
             abort(400, "Duplicate product")
         # Wholesale prices are negotiated but must be authorized by a sales-role user.
-        offer = money(item.get("unit_price")) if kind == "wholesale" else None
+        offer = money(item["unit_price"]) if kind == "wholesale" and "unit_price" in item else None
         if offer is not None and offer <= 0:
             abort(400, "Unit price must be positive")
         requested[pid] = (qty, offer)
@@ -194,12 +195,21 @@ def create_order(body_override=None, before_commit=None):
     )
     if len(products) != len(requested):
         abort(404, "Product not found")
+    special = {
+        x.product_id: x.price
+        for x in db.session.scalars(
+            db.select(CustomerPrice).where(
+                CustomerPrice.customer_id == customer.id,
+                CustomerPrice.product_id.in_(requested),
+            )
+        )
+    }
     subtotal = Decimal("0.00")
     for product in products:
         quantity, offered_price = requested[product.id]
         if product.stock < quantity:
             abort(409, f"Insufficient stock for SKU {product.sku}")
-        price = product.price if offered_price is None else offered_price
+        price = special.get(product.id, product.price) if offered_price is None else offered_price
         subtotal += price * quantity
     if discount > subtotal:
         abort(400, "Discount exceeds subtotal")
@@ -207,6 +217,8 @@ def create_order(body_override=None, before_commit=None):
     rate = Decimal(str(current_app.config["VAT_RATE"]))
     vat = (base * rate / Decimal(100)).quantize(CENT, rounding=ROUND_HALF_UP)
     total = base + vat
+    if "expected_total" in body and money(body["expected_total"]) != total:
+        abort(409, "ราคาหรือยอดรวมเปลี่ยน กรุณาตรวจยอดแล้วลองอีกครั้ง")
     if total > Decimal("999999999.99"):
         abort(400, "Total exceeds limit")
 
@@ -224,7 +236,7 @@ def create_order(body_override=None, before_commit=None):
     db.session.flush()
     for product in products:
         qty, offer = requested[product.id]
-        price = product.price if offer is None else offer
+        price = special.get(product.id, product.price) if offer is None else offer
         product.stock -= qty
         db.session.add(
             SaleLine(
@@ -251,7 +263,7 @@ def create_order(body_override=None, before_commit=None):
         actor_id=g.user.id,
     )
     db.session.add(order)
-    if method != "credit":
+    if method != "credit" and total > 0:
         payment = Payment(sale_id=sale.id, amount=total, reference=f"auto-{key}", actor_id=g.user.id)
         db.session.add(payment)
         db.session.flush()
@@ -266,7 +278,14 @@ def create_order(body_override=None, before_commit=None):
 @bp.get("/api/online/sales")
 @roles("sales", "accountant")
 def sales_list():
-    sales = list(db.session.scalars(db.select(Sale).order_by(Sale.id.desc()).limit(100)))
+    query = db.select(Sale)
+    if request.args.get("outstanding") == "1":
+        query = query.where(Sale.paid < Sale.total)
+    before = request.args.get("before", type=int)
+    if before is not None:
+        query = query.where(Sale.id < before)
+    rows = list(db.session.scalars(query.order_by(Sale.id.desc()).limit(101)))
+    sales = rows[:100]
     orders = (
         {
             o.sale_id: o
@@ -275,7 +294,10 @@ def sales_list():
         if sales
         else {}
     )
-    return {"items": [serialize_sale(s, orders.get(s.id)) for s in sales]}
+    return {
+        "items": [serialize_sale(s, orders.get(s.id)) for s in sales],
+        "next_before": sales[-1].id if len(rows) > 100 else None,
+    }
 
 
 @bp.get("/api/online/orders")
@@ -286,7 +308,18 @@ def order_list():
             db.select(OnlineOrder).where(OnlineOrder.kind == "wholesale").order_by(OnlineOrder.id.desc()).limit(100)
         )
     )
-    return {"items": [serialize_sale(db.session.get(Sale, o.sale_id), o) for o in orders]}
+    items = [serialize_sale(db.session.get(Sale, o.sale_id), o) for o in orders]
+    if g.user.role == "warehouse":
+        for item in items:
+            hide_sale_amounts(item)
+    return {"items": items}
+
+
+def hide_sale_amounts(item):
+    for key in ("subtotal", "vat", "total", "paid", "balance", "discount", "shipping_fee"):
+        item.pop(key, None)
+    for line in item.get("lines", ()):
+        line.pop("unit_price", None)
 
 
 @bp.get("/api/online/orders/<int:sale_id>")
@@ -308,6 +341,8 @@ def delivery_note_data(sale_id):
             ],
         }
     )
+    if g.user.role == "warehouse":
+        hide_sale_amounts(result)
     return result
 
 

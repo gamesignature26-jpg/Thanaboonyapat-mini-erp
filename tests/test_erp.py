@@ -156,32 +156,37 @@ def test_user_creation_and_disabled_account(client, app):
     assert client.get("/auth/me").status_code == 401
 
 
-def test_public_registration_requires_admin_approval(client, app):
-    csrf = client.get("/auth/csrf").json["csrf_token"]
-    response = post(client, csrf, "/auth/register", {"username": "pending-sales", "password": "synthetic-password"})
-    assert response.status_code == 202
-    with app.app_context():
-        pending = db.session.scalar(db.select(User).where(User.username == "pending-sales"))
-        assert pending.role == "sales"
-        assert pending.active is False
-        assert pending.password_hash != "synthetic-password"
+def test_only_owner_can_create_and_update_staff(client, app):
     csrf = client.get("/auth/csrf").json["csrf_token"]
     assert (
-        post(client, csrf, "/auth/login", {"username": "pending-sales", "password": "synthetic-password"}).status_code
-        == 401
+        post(client, csrf, "/auth/register", {"username": "pending", "password": "synthetic-password"}).status_code
+        == 404
     )
-    token = login(client)
-    listed = client.get("/users").json["items"]
-    assert any(item["username"] == "pending-sales" and not item["active"] for item in listed)
-    assert post(client, token, f"/users/{pending.id}/activate", {}).json["active"] is True
-    other = app.test_client()
-    other_csrf = other.get("/auth/csrf").json["csrf_token"]
+    owner = login(client)
     assert (
         post(
-            other, other_csrf, "/auth/login", {"username": "pending-sales", "password": "synthetic-password"}
+            client, owner, "/users", {"username": "second-owner", "password": "synthetic-password", "role": "admin"}
         ).status_code
-        == 200
+        == 400
     )
+    staff = post(
+        client, owner, "/users", {"username": "employee", "password": "synthetic-password-only", "role": "sales"}
+    )
+    assert staff.status_code == 201
+    uid = staff.json["id"]
+    other = app.test_client()
+    other_token = login(other, "employee")
+    assert (
+        other.patch(f"/users/{uid}", json={"role": "accountant"}, headers={"X-CSRFToken": other_token}).status_code
+        == 403
+    )
+    assert client.patch(f"/users/{uid}", json={"role": "warehouse"}, headers={"X-CSRFToken": owner}).status_code == 200
+    assert other.get("/auth/me").status_code == 401
+    assert client.patch(f"/users/{uid}", json={"active": False}, headers={"X-CSRFToken": owner}).status_code == 200
+    assert client.patch(f"/users/{uid}", json={"role": "admin"}, headers={"X-CSRFToken": owner}).status_code == 400
+    with app.app_context():
+        assert not db.session.get(User, uid).active
+        assert db.session.scalar(db.select(User).where(User.username == "pending")) is None
 
 
 def test_admin_can_reset_a_staff_password(client, app):

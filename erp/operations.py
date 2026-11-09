@@ -656,9 +656,6 @@ def install_operations(app):
             abort(409, "Sender disabled")
         body = data()
         lines = json.loads(draft.lines)
-        for line in lines:
-            product = db.get_or_404(Product, line["product_id"])
-            line["unit_price"] = money_json(product.price)
         order_body = {
             "kind": "wholesale",
             "customer_id": draft.customer_id,

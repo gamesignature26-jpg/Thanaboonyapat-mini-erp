@@ -5,6 +5,7 @@ services:
     region: singapore
     plan: free
     branch: feature/thanabunyapat-online
+    autoDeployTrigger: 'off'
     buildCommand: pip install -r requirements.txt
     startCommand: >-
       DATABASE_URL="$(printf '%s' "$DATABASE_URL" | sed -e 's#^postgres://#postgresql+psycopg://#' -e 's#^postgresql://#postgresql+psycopg://#')"; export DATABASE_URL; flask --app erp db upgrade && flask --app erp bootstrap-admin && exec gunicorn --bind 0.0.0.0:${PORT} 'erp:create_app()'

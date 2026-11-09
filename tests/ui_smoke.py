@@ -9,7 +9,8 @@ from werkzeug.security import generate_password_hash
 from werkzeug.serving import make_server
 
 from erp import create_app
-from erp.models import User, db
+from erp.extended import CustomerPrice
+from erp.models import Customer, Product, User, db
 from erp.online import OnlineExpense
 
 
@@ -34,6 +35,11 @@ def main():
             )
         )
         db.session.flush()
+        product = Product(sku="UI-WATER", name="Synthetic water pack", stock=10, price=100)
+        customer = Customer(name="Synthetic POS customer", address="Synthetic address")
+        db.session.add_all([product, customer])
+        db.session.flush()
+        db.session.add(CustomerPrice(product_id=product.id, customer_id=customer.id, price=80, updated_by=1))
         db.session.add(
             OnlineExpense(amount=100, description="Synthetic receipt", category="Test", method="cash", actor_id=1)
         )
@@ -50,6 +56,21 @@ def main():
             page.get_by_label("ชื่อผู้ใช้", exact=True).fill("ui-test-owner")
             page.get_by_label("รหัสผ่าน", exact=True).fill("synthetic-ui-password")
             page.get_by_role("button", name="เข้าสู่ระบบ", exact=True).click()
+            page.get_by_role("button", name="ขายหน้าร้าน POS", exact=True).click()
+            page.get_by_role("button", name="Synthetic water pack", exact=False).click()
+            page.locator('#pos-form select[name="customer_id"]').select_option(label="Synthetic POS customer")
+            page.get_by_text("ราคาพิเศษลูกค้า", exact=True).wait_for()
+            assert "85.60" in page.locator("#pos-form .total").inner_text()
+            page.locator('#pos-form select[name="method"]').select_option("credit")
+            page.get_by_role("button", name="บันทึกการขายและตัดสต๊อก", exact=True).click()
+            page.get_by_role("button", name="รับชำระ", exact=True).click()
+            page.get_by_role("button", name="บันทึกรับชำระ", exact=True).click()
+            page.get_by_role("button", name="ออกใบเสร็จร่าง", exact=True).click()
+            with page.expect_popup() as slip:
+                page.get_by_role("link", name="58 มม.", exact=True).click()
+            slip.value.get_by_text("ข้อมูลทดสอบเท่านั้น", exact=False).first.wait_for()
+            slip.value.get_by_role("button", name="พิมพ์เอกสาร", exact=True).wait_for()
+            slip.value.close()
             page.get_by_role("button", name="รายสัปดาห์ / ค่าแรง / หลักฐาน", exact=True).click()
             page.get_by_role("heading", name="ยืนยันอีเมล", exact=True).wait_for()
             page.get_by_role("button", name="รายสัปดาห์ / ค่าแรง", exact=True).click()
@@ -75,7 +96,7 @@ def main():
             assert not errors, errors
             page.screenshot(path="ui-operations-mobile.png", full_page=True)
             browser.close()
-        print("Mobile browser verified: login, email settings, wages, receipt upload, LINE inbox")
+        print("Mobile browser verified: POS customer price, payment, receipt preview, and operations")
     finally:
         server.shutdown()
 

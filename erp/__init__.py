@@ -66,6 +66,7 @@ def roles(*allowed):
                 not user
                 or not user.active
                 or session.get("password_version") != hashlib.sha256(user.password_hash.encode()).hexdigest()
+                or session.get("session_version") != user.session_version
             ):
                 abort(401)
             if user.role != "admin" and user.role not in allowed:
@@ -118,7 +119,12 @@ def create_app(config=None):
                     "connect-src 'self'; img-src 'self' data:; "
                     "base-uri 'none'; object-src 'none'; frame-ancestors 'none'"
                     if request.path == "/app"
-                    else "default-src 'none'; frame-ancestors 'none'"
+                    else (
+                        "default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; "
+                        "base-uri 'none'; frame-ancestors 'none'"
+                        if request.path.startswith("/api/extended/documents/") and request.path.endswith("/print")
+                        else "default-src 'none'; frame-ancestors 'none'"
+                    )
                 ),
                 "Cache-Control": "no-store",
                 "Referrer-Policy": "same-origin",
@@ -161,27 +167,10 @@ def create_app(config=None):
             abort(401, "Invalid credentials")
         session.clear()
         session["uid"] = user.id
+        session["session_version"] = user.session_version
         session["password_version"] = hashlib.sha256(user.password_hash.encode()).hexdigest()
         session.permanent = True
         return {"role": user.role, "csrf_token": generate_csrf()}
-
-    @app.post("/auth/register")
-    @limiter.limit("3 per hour")
-    def register():
-        """Accept a staff access request without granting access automatically."""
-        body = data()
-        username = text(body, "username", 80)
-        password = body.get("password")
-        if not isinstance(password, str) or not 12 <= len(password) <= 128:
-            abort(400, "Password must be 12–128 characters")
-        # Return the same result for an existing name to avoid account enumeration.
-        if db.session.scalar(db.select(User.id).where(User.username == username)):
-            return "", 202
-        db.session.add(
-            User(username=username, password_hash=generate_password_hash(password), role="sales", active=False)
-        )
-        db.session.commit()
-        return "", 202
 
     app.config["DUMMY_HASH"] = generate_password_hash(secrets.token_urlsafe(32))
 
@@ -197,7 +186,11 @@ def create_app(config=None):
         return {"id": g.user.id, "username": g.user.username, "role": g.user.role}
 
     def add_user(username, password, role):
-        if role not in ROLES or not isinstance(password, str) or not 12 <= len(password) <= 128:
+        if (
+            role not in ("sales", "warehouse", "accountant")
+            or not isinstance(password, str)
+            or not 12 <= len(password) <= 128
+        ):
             abort(400, "Role or password invalid (12–128 characters required)")
         user = User(username=username, password_hash=generate_password_hash(password), role=role)
         db.session.add(user)
@@ -211,7 +204,8 @@ def create_app(config=None):
         """Bootstrap an admin with an interactive, hidden password prompt."""
         if not username.strip() or len(username) > 80:
             raise click.ClickException("Invalid username")
-        add_user(username.strip(), password, "admin")
+        db.session.add(User(username=username.strip(), password_hash=generate_password_hash(password), role="admin"))
+        db.session.commit()
         click.echo("Admin created")
 
     @app.cli.command("bootstrap-admin")
@@ -231,7 +225,8 @@ def create_app(config=None):
         if db.session.scalar(db.select(User).where(User.username == username)):
             click.echo("Admin bootstrap complete")
             return
-        add_user(username, password, "admin")
+        db.session.add(User(username=username, password_hash=generate_password_hash(password), role="admin"))
+        db.session.commit()
         click.echo("Admin bootstrap complete")
 
     @app.route("/users", methods=["GET", "POST"])
@@ -247,6 +242,28 @@ def create_app(config=None):
         body = data()
         user = add_user(text(body, "username", 80), body.get("password"), body.get("role"))
         return {"id": user.id}, 201
+
+    @app.patch("/users/<int:user_id>")
+    @roles()
+    def update_staff(user_id):
+        """Owner-only staff role and activation changes with session revocation."""
+        body = data()
+        user = db.get_or_404(User, user_id)
+        if user.role == "admin" or user.id == g.user.id:
+            abort(403, "Owner account cannot be altered here")
+        if not body or set(body) - {"role", "active"}:
+            abort(400, "Invalid staff update")
+        if "role" in body:
+            if body["role"] not in ("sales", "warehouse", "accountant"):
+                abort(400, "Invalid staff role")
+            user.role = body["role"]
+        if "active" in body:
+            if type(body["active"]) is not bool:
+                abort(400, "active must be boolean")
+            user.active = body["active"]
+        user.session_version += 1
+        db.session.commit()
+        return {"id": user.id, "role": user.role, "active": user.active}
 
     @app.post("/users/<int:user_id>/activate")
     @roles()
@@ -266,7 +283,9 @@ def create_app(config=None):
             abort(400, "Password must be 12–128 characters")
         user = db.get_or_404(User, user_id)
         user.password_hash = generate_password_hash(password)
+        user.session_version += 1
         if user.id == g.user.id:
+            session["session_version"] = user.session_version
             session["password_version"] = hashlib.sha256(user.password_hash.encode()).hexdigest()
         db.session.commit()
         return "", 204
@@ -365,7 +384,18 @@ def create_app(config=None):
         )
         if len(products) != len(quantities):
             abort(404)
-        subtotal = sum((p.price * quantities[p.id] for p in products), Decimal("0.00"))
+        from .extended import CustomerPrice
+
+        special = {
+            row.product_id: row.price
+            for row in db.session.scalars(
+                db.select(CustomerPrice).where(
+                    CustomerPrice.customer_id == customer.id,
+                    CustomerPrice.product_id.in_(quantities),
+                )
+            )
+        }
+        subtotal = sum((special.get(p.id, p.price) * quantities[p.id] for p in products), Decimal("0.00"))
         vat = (subtotal * rate / 100).quantize(CENT, rounding=ROUND_HALF_UP)
         if subtotal + vat > Decimal("999999999.99"):
             abort(400, "Sale exceeds amount limit")
@@ -387,7 +417,14 @@ def create_app(config=None):
                 abort(409, "Insufficient stock")
             p.stock -= qty
             db.session.add(
-                SaleLine(sale_id=sale.id, product_id=p.id, sku=p.sku, name=p.name, quantity=qty, price=p.price)
+                SaleLine(
+                    sale_id=sale.id,
+                    product_id=p.id,
+                    sku=p.sku,
+                    name=p.name,
+                    quantity=qty,
+                    price=special.get(p.id, p.price),
+                )
             )
             db.session.add(
                 StockMovement(product_id=p.id, delta=-qty, reason="Sale", sale_id=sale.id, actor_id=g.user.id)
@@ -443,5 +480,9 @@ def create_app(config=None):
     from .operations import install_operations
 
     install_operations(app)
+
+    from .extended import install_extended
+
+    install_extended(app)
 
     return app
