@@ -2,6 +2,7 @@
 
 This report is *not* an ageing report: invoices do not yet track due dates.
 """
+
 from decimal import Decimal
 
 from flask import Blueprint, abort, request
