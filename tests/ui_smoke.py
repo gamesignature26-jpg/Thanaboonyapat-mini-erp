@@ -157,6 +157,8 @@ def main():
             page.get_by_role("button", name="ดูรายละเอียด", exact=True).click()
             page.locator("#quote-status-note").fill("Synthetic quotation sent to customer")
             page.get_by_role("button", name="บันทึกว่าส่งแล้ว", exact=True).click()
+            page.wait_for_timeout(250)
+            print("QUOTE STATE AFTER SENT", page.locator("#quote-detail").inner_text()[-500:], "TOAST:", page.locator("#toast").inner_text(), flush=True)
             page.locator("#quote-status-note").fill("Synthetic customer agreed in test")
             page.get_by_role("button", name="ลูกค้ายืนยัน", exact=True).click()
             page.locator('#quote-convert-form select[name="delivery_mode"]').select_option("pickup")
