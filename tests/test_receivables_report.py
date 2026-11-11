@@ -1,6 +1,6 @@
 """Regression coverage for read-only receivables reporting."""
 
-from .conftest import login, post
+from conftest import login, post
 
 
 def test_receivables_requires_login(client):
