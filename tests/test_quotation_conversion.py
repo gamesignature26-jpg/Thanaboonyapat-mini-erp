@@ -5,7 +5,7 @@ from datetime import date, timedelta
 from conftest import login, post
 
 from erp.models import Product, Sale, StockMovement, db
-from erp.quotations import Quotation, QuotationLine
+from erp.quotations import Quotation
 
 
 def quote_body(pid, cid, key):
