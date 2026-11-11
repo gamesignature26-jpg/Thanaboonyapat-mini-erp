@@ -12,7 +12,7 @@ def test_billing_notes_restrict_unauthenticated_and_warehouse(client, seeded):
     unauth = client.application.test_client()
     assert unauth.get("/api/billing-notes").status_code == 401
     assert unauth.get(f"/api/billing-notes/{sid}").status_code == 401
-    warehouse = login(client, "warehouse")
+    login(client, "warehouse")
     assert client.get("/api/billing-notes").status_code == 403
     assert client.get(f"/api/billing-notes/{sid}/print").status_code == 403
     login(client, "accountant")
