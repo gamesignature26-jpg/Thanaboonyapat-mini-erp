@@ -86,7 +86,7 @@ def test_conversion_creates_one_credit_sale_and_moves_stock_once(seeded, client,
         assert sale.customer_id == cid and str(sale.total) == "214.00"
         assert str(sale.paid) == "0.00"
         assert db.session.scalar(db.select(db.func.count(Sale.id))) == 1
-        assert db.session.scalar(db.select(db.func.count(StockMovement.id).where(StockMovement.delta < 0))) == 1
+        assert db.session.scalar(db.select(db.func.count(StockMovement.id)).where(StockMovement.delta < 0)) == 1
         quote = db.session.get(Quotation, qid)
         assert quote.sale_id == sale_id
 
