@@ -19,7 +19,7 @@ def quotation(pid, cid, key="synthetic-quotation-idempotency-0001", **overrides)
 
 
 def test_quotation_requires_login_and_role(client, seeded):
-    token, pid, cid = seeded
+    _token, pid, cid = seeded
     unauthenticated = client.application.test_client()
     assert unauthenticated.get("/api/quotations").status_code == 401
     assert unauthenticated.post("/api/quotations", json=quotation(pid, cid)).status_code == 401
