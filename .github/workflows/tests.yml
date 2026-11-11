@@ -40,8 +40,9 @@ jobs:
       - run: flask --app erp db upgrade
       - run: python -m pytest -q --junitxml=test-results.xml
       - run: pip install playwright==1.62.0
-      - run: python -m playwright install --with-deps chromium
       - run: PYTHONPATH=. python tests/ui_smoke.py
+        env:
+          PLAYWRIGHT_CHROMIUM_CHANNEL: chrome
       - uses: actions/upload-artifact@v4
         if: always()
         with:

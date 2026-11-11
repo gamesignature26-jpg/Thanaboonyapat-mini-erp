@@ -1,6 +1,7 @@
 """Run explicitly in CI with Playwright; all accounts/data are disposable and synthetic."""
 
 import io
+import os
 import threading
 
 from PIL import Image
@@ -48,7 +49,7 @@ def main():
     threading.Thread(target=server.serve_forever, daemon=True).start()
     try:
         with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
+            browser = p.chromium.launch(headless=True, channel=os.getenv("PLAYWRIGHT_CHROMIUM_CHANNEL"))
             page = browser.new_page(viewport={"width": 390, "height": 844})
             errors = []
             page.on("pageerror", lambda e: errors.append(str(e)))
