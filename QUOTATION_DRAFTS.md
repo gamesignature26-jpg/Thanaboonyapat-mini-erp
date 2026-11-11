@@ -1,6 +1,6 @@
 # Quotation Drafts — Safe Add-on (2026-11-12)
 
-This module adds **draft quotations only**, not legal tax documents, accounts-receivable entries, sales orders, delivery reservations, or binding offers.
+This module adds internal quotation drafts and a staff-recorded approval/conversion workflow. A quote alone creates no sale, payment, stock reservation, or binding tax document. An explicitly confirmed conversion uses the **existing** wholesale sale engine and creates a credit sale.
 
 ## Scope and routes
 
@@ -19,7 +19,9 @@ This module adds **draft quotations only**, not legal tax documents, accounts-re
 - `GET /api/quotations?limit=50&before=<id>` — roles `admin`, `sales`, `accountant`.
 - `GET /api/quotations/<id>` — immutable customer/product/price snapshot.
 - `GET /api/quotations/<id>/print` — explicitly labeled *QUOTATION DRAFT* browser print preview, not a tax invoice.
-- On `/app` see **ใบเสนอราคา**, where authorized sales users can add product lines, select customer and VAT pricing mode, then create and review a draft.
+- `POST /api/quotations/<id>/status` — staff records `draft -> sent -> accepted/declined` with required contact note and immutable audit events. This records staff-reported communication, not externally verified customer approval. Expired quotes cannot be newly accepted.
+- `POST /api/quotations/<id>/convert` — only accepted, unexpired quotes; makes an idempotent **wholesale credit sale** through `erp.online.create_order` with row-locked stock, current VAT/prices and expected total; rejects price/SKU/quantity mismatch, depleted inventory, expired quote and changed delivery payload on retry. It stores a unique `sale_id` on the quote. Optional request fields: `delivery_mode` (`pickup` or `delivery`), `delivery_date`, `address`, `phone`, `driver`, `note`. Conversion does not automatically receive payment. Shipping fee and discount are zero; changes require a new quotation workflow.
+- On `/app` see **ใบเสนอราคา**, where sales/admin users can create drafts, record status notes, review history and convert an accepted quote. Accountant can view but cannot change statuses/convert.
 
 ## Pricing and stock behavior
 
@@ -31,14 +33,15 @@ This module adds **draft quotations only**, not legal tax documents, accounts-re
 
 ## Limits and gaps
 
-- Draft-only state; sending, customer acceptance, quote-to-order conversion, revision history, discount approval, legally effective quotation content, sales order and billing note workflow are **not implemented**.
+- **Not implemented:** formal customer e-signature, automated email delivery, revision/version history, discount approvals, official sales order issuance, a legally effective quotation approval trail, or certified tax documents.
+- `erp/billing_previews.py` offers `GET /api/billing-notes`, `GET /api/billing-notes/<sale_id>` and printable `GET /api/billing-notes/<sale_id>/print`: read-only billing previews from existing sales and current payment balances. These are **not persisted/issued billing notes** and do not add receivables. Sales and accountant may view; warehouse cannot.
 - Printed preview is minimally styled, and hardware printing remains unverified.
 - Customer/product selection on existing pages is still currently limited by legacy list endpoints; additional server search integration should be handled separately.
-- This module uses a new Alembic revision `e2b6d09c4112`, adding `quotation` and `quotation_line` tables only; it does not rewrite existing tables.
+- Alembic `e2b6d09c4112` adds quotation tables; `7c2d441e9ab0` adds a unique sale link, conversion request hash and append-only quotation-event table. Existing Sale/Stock/Payment tables are not changed.
 - Migration `downgrade` irreversibly drops quotation data. Never run it on business data.
 
 ## Verification and deployment gates
 
-CI runs PostgreSQL 16, Alembic upgrade/schema drift/downgrade/upgrade, pytest role/stock/snapshot/idempotency tests, and Playwright UI smoke test on synthetic data. Check the latest run rather than assuming prior success.
+CI runs PostgreSQL 16, Alembic upgrade/schema drift/downgrade/upgrade, pytest role/stock/snapshot/idempotency tests, and Playwright UI smoke test on synthetic data. Last confirmed full CI green for code including both modules: https://github.com/gamesignature26-jpg/Thanaboonyapat-mini-erp/actions/runs/43083722162; inspect latest GitHub Actions again after subsequent documentation-only changes.
 
 Render staging currently follows `feature/thanabunyapat-online` rather than this branch, and its database backup/restore status was **not verified**. No staging or production deployment is authorized until backup and isolation are verified. Never alter `main` or deploy Production as part of this add-on.
