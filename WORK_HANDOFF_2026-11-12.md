@@ -4,8 +4,8 @@ Updated: 2026-11-12 (Asia/Bangkok)
 ## Source of truth
 - Repo: https://github.com/gamesignature26-jpg/Thanaboonyapat-mini-erp
 - Current development branch: `feature/flow-loyverse-additions-20261112`
-- Last code commit validated by CI: `349393bc4056784618cc2c2ed0de7a5d132cfceb`
-- Passing GitHub Actions: https://github.com/gamesignature26-jpg/Thanaboonyapat-mini-erp/actions/runs/43076248435
+- Last fully validated code commit (prior to docs and cleanup): `91ad03407ebf15d361058578c2a050acd89b1288`
+- Passing GitHub Actions (code + browser): https://github.com/gamesignature26-jpg/Thanaboonyapat-mini-erp/actions/runs/43083722162
 - Original branch kept unchanged: `feature/thanabunyapat-online`; production branch `main` must not be modified or merged.
 - Previous README/HANDOFF.md may describe an older MVP; inspect actual branch code before deciding whether features are absent.
 
@@ -27,13 +27,16 @@ Continue adding missing FlowAccount-like accounting/document functions and Loyve
 - Added `migrations/versions/e2b6d09c4112_quotation_drafts.py`: additive `quotation` / `quotation_line` tables. No existing tables changed.
 - Added `erp/templates/quotation_print.html` draft-only print preview, `/app` navigation/form/list/detail under `erp/static/online/app.js`, `tests/test_quotations.py` and mobile Playwright test in `tests/ui_smoke.py`.
 - Contract, limitations, and rollout safeguards: `QUOTATION_DRAFTS.md`.
-- Last verified **code** CI pass: https://github.com/gamesignature26-jpg/Thanaboonyapat-mini-erp/actions/runs/43080020553 (commit `ca636a8bd88ae7605fa6785fdad01384a103399c`).
+- Added audited status transitions in `erp/quotations.py` and new `QuotationEvent`/sale-link fields via `migrations/versions/7c2d441e9ab0_quotation_workflow.py`.
+- Added idempotent accepted-quote conversion through existing wholesale sale/stock path, strict price/quantity/VAT checks and role-limited UI. Corresponding tests: `tests/test_quotation_conversion.py` plus Playwright mobile checks.
+- Added `erp/billing_previews.py` and `erp/templates/billing_preview.html`: read-only customer billing view/print from existing Sale (not legally issued). Added Sales-page print link, `tests/test_billing_previews.py` and browser smoke check.
+- Last verified **code** CI pass: https://github.com/gamesignature26-jpg/Thanaboonyapat-mini-erp/actions/runs/43083722162 (commit `91ad03407ebf15d361058578c2a050acd89b1288`). Browser diagnostic cleanup and docs revisions are later commits; check latest CI.
 - Render review: selected confirmed workspace `Gamesignature26's workspace`; staging web service is `thanabunyapat-erp-staging-c8km`, still follows original `feature/thanabunyapat-online`; Postgres `thanabunyapat-erp-test` is Free with expiry date 2026-12-06. No verified backup restore, so **no Deploy**, no Render migrations and no production changes.
-- Next: quote acceptance/revisions and safe quote-to-order workflow, bill/invoice follow-up and purchase/COGS modules. Do not claim these exist.
+- Next: real versioned quote revisions and external customer approval; formal multi-sale billing note workflow; return/credit-note drafts; supplier purchasing, receiving and COGS. Do not confuse the new billing preview with a formal billing note.
 
 ## Immediate next work (in priority order)
 1. Re-audit actual routes, models, templates, JS and tests to prevent duplicate features and identify incomplete implementations.
-2. Extend the existing **draft quotation** workflow to quotation acceptance/revision -> sales order -> billing note / payment follow-up. Never bypass stock/price checks when converting a quote. Do **not** misuse `IssuedDocument` tax invoice/receipt semantics. Draft numbers must be separate from legally issued document numbers. New states must have explicit validation, auth and immutable snapshots where appropriate.
+2. Review the new **staff-recorded** quote acceptance and conversion code (already implemented) and add formal quote revisions/customer acceptance evidence and multi-sale billing-note issuance only after document/business rules are approved. Never bypass stock/price checks when converting a quote. Do **not** misuse `IssuedDocument` tax invoice/receipt semantics. Draft numbers must be separate from legally issued document numbers. New states must have explicit validation, auth and immutable snapshots where appropriate.
 3. Implement return/credit-note *draft* workflow, including safe stock-reversal design. Do not create or issue legally valid tax credit notes without verified Thai tax/accounting requirements and explicit review.
 4. Add purchasing/suppliers, stock receiving, cost/COGS support and per-order gross margin when data model permits. Never label sales minus recorded expenses as net profit.
 5. Improve POS customer lookup selection/search, customer history paging, and outstanding report paging; fix gaps without removing old UI.
