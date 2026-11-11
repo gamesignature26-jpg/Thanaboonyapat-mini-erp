@@ -492,4 +492,9 @@ def create_app(config=None):
 
     install_extended(app)
 
+    # Add-on report: read-only; existing sales, documents and stock routes are unchanged.
+    from .receivables_report import bp as receivables_report_bp
+
+    app.register_blueprint(receivables_report_bp)
+
     return app
