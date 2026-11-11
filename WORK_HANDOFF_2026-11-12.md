@@ -21,9 +21,19 @@ Updated: 2026-11-12 (Asia/Bangkok)
 ## Owner's request
 Continue adding missing FlowAccount-like accounting/document functions and Loyverse-like retail/POS functions to this existing app, *only when not already implemented*. Preserve existing business workflows, data, code behavior, and interfaces. Prioritize functions useful for bottled-water wholesale/distribution around Samut Prakan.
 
+## Completed in this continuation (2026-11-12)
+
+- Added `erp/quotations.py`: authenticated, idempotent quotation drafts with immutable price/customer/product snapshots, inclusive/exclusive VAT, expiry/note and zero stock/sale/payment side effects.
+- Added `migrations/versions/e2b6d09c4112_quotation_drafts.py`: additive `quotation` / `quotation_line` tables. No existing tables changed.
+- Added `erp/templates/quotation_print.html` draft-only print preview, `/app` navigation/form/list/detail under `erp/static/online/app.js`, `tests/test_quotations.py` and mobile Playwright test in `tests/ui_smoke.py`.
+- Contract, limitations, and rollout safeguards: `QUOTATION_DRAFTS.md`.
+- Last verified **code** CI pass: https://github.com/gamesignature26-jpg/Thanaboonyapat-mini-erp/actions/runs/43080020553 (commit `ca636a8bd88ae7605fa6785fdad01384a103399c`).
+- Render review: selected confirmed workspace `Gamesignature26's workspace`; staging web service is `thanabunyapat-erp-staging-c8km`, still follows original `feature/thanabunyapat-online`; Postgres `thanabunyapat-erp-test` is Free with expiry date 2026-12-06. No verified backup restore, so **no Deploy**, no Render migrations and no production changes.
+- Next: quote acceptance/revisions and safe quote-to-order workflow, bill/invoice follow-up and purchase/COGS modules. Do not claim these exist.
+
 ## Immediate next work (in priority order)
 1. Re-audit actual routes, models, templates, JS and tests to prevent duplicate features and identify incomplete implementations.
-2. Implement an additive sales-document workflow: quotation -> sales order -> billing note / payment follow-up. Do **not** misuse `IssuedDocument` tax invoice/receipt semantics. Draft numbers must be separate from legally issued document numbers. New states must have explicit validation, auth and immutable snapshots where appropriate.
+2. Extend the existing **draft quotation** workflow to quotation acceptance/revision -> sales order -> billing note / payment follow-up. Never bypass stock/price checks when converting a quote. Do **not** misuse `IssuedDocument` tax invoice/receipt semantics. Draft numbers must be separate from legally issued document numbers. New states must have explicit validation, auth and immutable snapshots where appropriate.
 3. Implement return/credit-note *draft* workflow, including safe stock-reversal design. Do not create or issue legally valid tax credit notes without verified Thai tax/accounting requirements and explicit review.
 4. Add purchasing/suppliers, stock receiving, cost/COGS support and per-order gross margin when data model permits. Never label sales minus recorded expenses as net profit.
 5. Improve POS customer lookup selection/search, customer history paging, and outstanding report paging; fix gaps without removing old UI.
