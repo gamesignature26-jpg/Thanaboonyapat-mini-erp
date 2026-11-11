@@ -22,7 +22,11 @@ def test_quotation_requires_login_and_role(client, seeded):
     _token, pid, cid = seeded
     unauthenticated = client.application.test_client()
     assert unauthenticated.get("/api/quotations").status_code == 401
-    assert unauthenticated.post("/api/quotations", json=quotation(pid, cid)).status_code == 401
+    csrf = unauthenticated.get("/auth/csrf").json["csrf_token"]
+    assert (
+        unauthenticated.post("/api/quotations", json=quotation(pid, cid), headers={"X-CSRFToken": csrf}).status_code
+        == 401
+    )
     warehouse = login(client, "warehouse")
     assert client.get("/api/quotations").status_code == 403
     assert post(client, warehouse, "/api/quotations", quotation(pid, cid)).status_code == 403
