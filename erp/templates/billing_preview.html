@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ใบวางบิลตัวอย่าง {{ bill.number }}</title>
+</head>
+<body>
+<main>
+<h1>ใบวางบิลตัวอย่าง / BILLING PREVIEW</h1>
+<p><strong>ไม่ใช่ใบกำกับภาษี ไม่ใช่หลักฐานรับเงิน</strong></p>
+<p>เลขอ้างอิงภายใน: {{ bill.number }}</p>
+<p>อ้างอิงบิลขาย #{{ bill.sale_id }} · วันที่ขาย: {{ bill.date }}</p>
+<p>ลูกค้า: {{ bill.customer.name }}</p>
+<p>ที่อยู่: {{ bill.customer.address }}</p>
+<p>เลขผู้เสียภาษี: {{ bill.customer.tax_id or "-" }}</p>
+<table>
+<thead><tr><th>สินค้า</th><th>รหัส</th><th>จำนวน</th><th>ราคาต่อหน่วย</th></tr></thead>
+<tbody>
+{% for item in bill.lines %}
+<tr><td>{{ item.name }}</td><td>{{ item.sku }}</td><td>{{ item.quantity }}</td><td>{{ item.unit_price }}</td></tr>
+{% endfor %}
+</tbody>
+</table>
+<p>ราคาสินค้าแบบ {{ bill.vat_price_mode }}</p>
+<p>ก่อน VAT: {{ bill.subtotal }} บาท</p>
+<p>VAT {{ bill.vat_rate }}%: {{ bill.vat }} บาท</p>
+<p>ยอดรวมบิลขาย: {{ bill.total }} บาท</p>
+<p>ยอดรับชำระแล้ว: {{ bill.paid }} บาท</p>
+<p><strong>ยอดคงค้าง ณ เวลาที่เปิดเอกสาร: {{ bill.outstanding }} บาท</strong></p>
+<p>เอกสารนี้คำนวณจากข้อมูลการขายและการรับชำระที่บันทึกอยู่ในระบบ ไม่มีการออกเอกสารทางบัญชีใหม่หรือรับรองวันที่ครบกำหนด</p>
+</main>
+</body>
+</html>
