@@ -55,7 +55,9 @@ def test_permissions_for_quotation_transitions(seeded, client, app):
     token, pid, cid = seeded
     qid = post(client, token, "/api/quotations", quote_body(pid, cid, "synthetic-role-test-000001")).json["id"]
     accountant = login(client, "accountant")
-    assert post(client, accountant, f"/api/quotations/{qid}/status", {"status": "sent", "note": "No"}).status_code == 403
+    assert (
+        post(client, accountant, f"/api/quotations/{qid}/status", {"status": "sent", "note": "No"}).status_code == 403
+    )
     warehouse = login(client, "warehouse")
     assert post(client, warehouse, f"/api/quotations/{qid}/status", {"status": "sent", "note": "No"}).status_code == 403
 
