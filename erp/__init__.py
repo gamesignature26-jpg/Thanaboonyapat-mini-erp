@@ -497,4 +497,8 @@ def create_app(config=None):
 
     app.register_blueprint(receivables_report_bp)
 
+    from .customer_lookup import bp as customer_lookup_bp
+
+    app.register_blueprint(customer_lookup_bp)
+
     return app
