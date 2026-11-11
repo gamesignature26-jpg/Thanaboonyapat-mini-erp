@@ -297,6 +297,7 @@ function render(){
  if(!state.user||root.dataset.operations)return;
  const view=$('view');
  if(!view)return;
+ const quoteStatusDraft=$('quote-status-note')?.value||'';
  const quoteForm=$('quote-form');
  const quoteDraft=quoteForm?f(quoteForm):null;
  const wholesaleDraft=$('wh-form');
@@ -306,6 +307,7 @@ function render(){
   {attr:focused.hasAttribute('data-dec')?'data-dec':'data-add',id:focused.dataset.dec||focused.dataset.add,qty:focused.classList.contains('qty-control')}:null;
  const map={dashboard,pos,wholesale,sales,quotations,inventory:inventoryWithExtras,customers,expenses,reports,users,prices,settings};
  view.innerHTML=(map[state.view]||dashboard)();
+ if($('quote-status-note'))$('quote-status-note').value=quoteStatusDraft;
  view.setAttribute('aria-busy','false');
  if(quoteDraft&&$('quote-form'))for(const [name,value] of Object.entries(quoteDraft)){
   const control=$('quote-form').elements.namedItem(name);
