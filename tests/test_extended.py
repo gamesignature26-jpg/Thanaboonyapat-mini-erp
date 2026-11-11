@@ -189,13 +189,30 @@ def test_tax_invoice_requires_company_and_customer_details(client, app, seeded):
         },
     )
     assert profile.status_code == 200 and profile.json["default_paper"] == "58"
-    issued = post(client, owner, "/api/extended/documents", {"kind": "tax_invoice", "sale_id": sid})
+    payload = {
+        "kind": "tax_invoice",
+        "sale_id": sid,
+        "buyer": {
+            "name": "Synthetic Invoice Buyer",
+            "address": "Synthetic Invoice Address",
+            "tax_id": "0123456789012",
+            "branch": "00002",
+        },
+    }
+    invalid = {**payload, "buyer": {**payload["buyer"], "branch": "12"}}
+    assert post(client, owner, "/api/extended/documents", invalid).status_code == 400
+    issued = post(client, owner, "/api/extended/documents", payload)
     assert issued.status_code == 201
     html = client.get(f"/api/extended/documents/{issued.json['id']}/print?paper=a4").data.decode()
     assert "Synthetic Test Partnership" in html
+    assert "Synthetic Invoice Buyer" in html and "Synthetic Invoice Address" in html and "สาขา 00002" in html
     assert "ข้อมูลทดสอบเท่านั้น" in html
     assert post(client, owner, "/api/extended/documents", {"kind": "tax_invoice", "sale_id": sid}).status_code == 200
     assert client.get(f"/api/extended/documents/{issued.json['id']}/print?paper=invalid").status_code == 400
+    thermal = f"/api/extended/documents/{issued.json['id']}/thermal"
+    assert client.get(thermal).json["snapshot"]["sale"]["customer_branch"] == "00002"
+    login(client, "warehouse")
+    assert client.get(thermal).status_code == 403
 
 
 def make_xlsx(rows):

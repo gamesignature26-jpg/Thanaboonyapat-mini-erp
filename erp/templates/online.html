@@ -6,6 +6,7 @@
 <meta name="theme-color" content="#152f42">
 <title>Thanabunyapat One · ออนไลน์</title>
 <link rel="stylesheet" href="/assets/online/app.css">
+<script src="/assets/online/printer.js" defer></script>
 <script src="/assets/online/app.js" defer></script>
 <script src="/assets/online/recovery.js" defer></script>
 <script src="/assets/online/operations.js" defer></script>
@@ -13,6 +14,16 @@
 <body>
 <div id="root"></div>
 <div id="toast" role="status" aria-live="polite"></div>
+<dialog id="printer-dialog" aria-labelledby="printer-title">
+  <div class="row space"><h2 id="printer-title">เครื่องพิมพ์ Bluetooth 58 มม.</h2><button type="button" class="btn secondary slim" id="printer-close">ปิด</button></div>
+  <p>สำหรับเครื่องพิมพ์ BLE ที่รองรับภาพ ESC/POS หากเครื่องใช้ไดรเวอร์หรือแอปผู้ผลิต ให้พิมพ์ผ่านหน้าตัวอย่าง 58 มม.</p>
+  <p id="printer-status" role="status"></p>
+  <form id="printer-form">
+    <div class="field"><label for="printer-service">Service UUID</label><input id="printer-service" name="service_uuid" required maxlength="36" autocomplete="off" spellcheck="false"></div>
+    <div class="field"><label for="printer-write">Write Characteristic UUID</label><input id="printer-write" name="write_uuid" required maxlength="36" autocomplete="off" spellcheck="false"></div>
+    <div class="row"><button type="submit" class="btn">เลือกเครื่องพิมพ์</button><button type="button" class="btn secondary" id="printer-disconnect">ตัดการเชื่อมต่อ</button></div>
+  </form>
+</dialog>
 <div id="print-root" aria-hidden="true"></div>
 </body>
 </html>

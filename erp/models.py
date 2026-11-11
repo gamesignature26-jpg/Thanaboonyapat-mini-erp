@@ -39,6 +39,7 @@ class Sale(db.Model):
     customer_name = db.Column(db.String(200), nullable=False)
     customer_tax_id = db.Column(db.String(13))
     customer_address = db.Column(db.String(1000), nullable=False)
+    vat_price_mode = db.Column(db.String(9), nullable=False, server_default="exclusive")
     subtotal = db.Column(db.Numeric(14, 2), nullable=False)
     vat_rate = db.Column(db.Numeric(5, 2), nullable=False)
     vat = db.Column(db.Numeric(14, 2), nullable=False)

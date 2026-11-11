@@ -108,6 +108,7 @@ def serialize_sale(s, order=None):
         "customer": s.customer_name,
         "subtotal": money_json(s.subtotal),
         "vat": money_json(s.vat),
+        "vat_price_mode": s.vat_price_mode,
         "total": money_json(s.total),
         "paid": money_json(s.paid),
         "balance": money_json(s.total - s.paid),
@@ -152,6 +153,9 @@ def create_order(body_override=None, before_commit=None):
     kind = limited(body, "kind", 15)
     if kind not in ("pos", "wholesale"):
         abort(400, "Invalid sale kind")
+    vat_price_mode = body.get("vat_price_mode", "exclusive")
+    if vat_price_mode not in ("exclusive", "inclusive"):
+        abort(400, "Invalid VAT price mode")
     mode = limited(body, "delivery_mode", 15, "pickup")
     if mode not in ("pickup", "delivery"):
         abort(400, "Invalid delivery mode")
@@ -213,10 +217,16 @@ def create_order(body_override=None, before_commit=None):
         subtotal += price * quantity
     if discount > subtotal:
         abort(400, "Discount exceeds subtotal")
-    base = subtotal - discount + fee
+    entered_total = subtotal - discount + fee
     rate = Decimal(str(current_app.config["VAT_RATE"]))
-    vat = (base * rate / Decimal(100)).quantize(CENT, rounding=ROUND_HALF_UP)
-    total = base + vat
+    if vat_price_mode == "inclusive":
+        total = entered_total
+        vat = (total * rate / (Decimal(100) + rate)).quantize(CENT, rounding=ROUND_HALF_UP)
+        base = total - vat
+    else:
+        base = entered_total
+        vat = (base * rate / Decimal(100)).quantize(CENT, rounding=ROUND_HALF_UP)
+        total = base + vat
     if "expected_total" in body and money(body["expected_total"]) != total:
         abort(409, "ราคาหรือยอดรวมเปลี่ยน กรุณาตรวจยอดแล้วลองอีกครั้ง")
     if total > Decimal("999999999.99"):
@@ -227,6 +237,7 @@ def create_order(body_override=None, before_commit=None):
         customer_name=customer.name,
         customer_tax_id=customer.tax_id,
         customer_address=customer.address,
+        vat_price_mode=vat_price_mode,
         subtotal=base,
         vat_rate=rate,
         vat=vat,

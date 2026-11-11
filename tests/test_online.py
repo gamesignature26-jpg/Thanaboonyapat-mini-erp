@@ -108,6 +108,23 @@ def test_wholesale_delivery_receivable_payment_and_expense(client, app, seeded):
     assert client.get("/api/online/dashboard").json["expenses_total"] == "25.00"
 
 
+def test_vat_inclusive_preserves_entered_total_for_pos_and_wholesale(client, app, seeded):
+    token, pid, cid = seeded
+    cases = (("pos", "200.00", "13.08"), ("wholesale", "190.00", "12.43"))
+    for kind, total, vat in cases:
+        body = order_body(pid, cid, f"test-inclusive-{kind}-1234567890", kind)
+        body.update(vat_price_mode="inclusive", expected_total=total)
+        response = post(client, token, "/api/online/orders", body)
+        assert response.status_code == 201
+        assert response.json["total"] == total and response.json["vat"] == vat
+        with app.app_context():
+            sale = db.session.get(Sale, response.json["id"])
+            assert sale.vat_price_mode == "inclusive"
+            assert sale.subtotal + sale.vat == sale.total
+    body = order_body(pid, cid, "test-invalid-vat-mode-1234567890")
+    assert post(client, token, "/api/online/orders", {**body, "vat_price_mode": "invalid"}).status_code == 400
+
+
 def test_online_rejects_invalid_and_unauthorized_actions(client, seeded):
     token, pid, cid = seeded
     body = order_body(pid, cid, "test-invalid-order-key-12345678", "wholesale")

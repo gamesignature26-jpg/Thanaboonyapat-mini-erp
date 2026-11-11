@@ -246,6 +246,7 @@ def payment_history(sale_id):
     ).all()
     return {
         "sale_id": sale.id,
+        "buyer": {"name": sale.customer_name, "address": sale.customer_address, "tax_id": sale.customer_tax_id or ""},
         "total": str(sale.total),
         "paid": str(sale.paid),
         "balance": str(sale.total - sale.paid),
@@ -276,6 +277,7 @@ def _snapshot(sale, company_row, payment=None):
             "customer_address": sale.customer_address,
             "subtotal": str(sale.subtotal),
             "vat_rate": str(sale.vat_rate),
+            "vat_price_mode": sale.vat_price_mode,
             "vat": str(sale.vat),
             "total": str(sale.total),
             "lines": [
@@ -331,14 +333,28 @@ def issue_document():
     if existing:
         return {"id": existing.id, "number": existing.number, "duplicate": True}, 200
     profile = _company()
+    buyer = None
+    if kind == "tax_invoice" and "buyer" in body:
+        fields = body["buyer"]
+        if not isinstance(fields, dict):
+            abort(400, "ข้อมูลผู้ซื้อไม่ถูกต้อง")
+        buyer = {key: text(fields, key, limit) for key, limit in (("name", 200), ("address", 1000), ("tax_id", 13))}
+        branch = fields.get("branch", "")
+        if branch not in ("", "00000") and not (
+            isinstance(branch, str) and len(branch) == 5 and branch.isascii() and branch.isdecimal()
+        ):
+            abort(400, "กรอกรหัสสาขา 5 หลัก หรือเว้นว่างหากไม่มีสาขา")
+        buyer["branch"] = branch
+    if kind == "tax_invoice" and (not _digits13(profile.tax_id) or not profile.address):
+        abort(409, "กรอกเลขผู้เสียภาษีและที่อยู่ผู้ขายในเมนูตั้งค่าบริษัทก่อน")
     if kind == "tax_invoice" and (
-        not _digits13(profile.tax_id)
-        or not profile.address
-        or not _digits13(sale.customer_tax_id or "")
-        or not sale.customer_address
+        not _digits13(buyer["tax_id"] if buyer else sale.customer_tax_id or "")
+        or not (buyer["address"] if buyer else sale.customer_address)
     ):
-        abort(409, "Company and buyer tax details are required for full tax-invoice draft")
+        abort(409, "กรอกชื่อ ที่อยู่ และเลขผู้เสียภาษี 13 หลักของผู้ซื้อให้ครบ")
     snap = _snapshot(sale, profile, payment if kind == "receipt" else None)
+    if buyer:
+        snap["sale"].update({f"customer_{key}": value for key, value in buyer.items()})
     row = IssuedDocument(
         kind=kind,
         sale_id=sale.id,
@@ -362,6 +378,21 @@ def sale_documents(sale_id):
         db.select(IssuedDocument).where(IssuedDocument.sale_id == sale_id).order_by(IssuedDocument.id)
     )
     return {"items": [{"id": x.id, "number": x.number, "kind": x.kind, "date": x.issued_at.isoformat()} for x in rows]}
+
+
+@bp.get("/api/extended/documents/<int:document_id>/thermal")
+@roles("sales", "accountant")
+def thermal_document(document_id):
+    row = db.get_or_404(IssuedDocument, document_id)
+    issued = row.issued_at
+    if issued.tzinfo is None:
+        issued = issued.replace(tzinfo=UTC)
+    return {
+        "number": row.number,
+        "kind": row.kind,
+        "issued": issued.astimezone(ZoneInfo("Asia/Bangkok")).strftime("%Y-%m-%d %H:%M"),
+        "snapshot": json.loads(row.snapshot_json),
+    }
 
 
 @bp.get("/api/extended/documents/<int:document_id>/print")

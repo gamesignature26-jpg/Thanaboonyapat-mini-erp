@@ -22,7 +22,7 @@ table{border-collapse:collapse;width:100%;margin-top:13px}th,td{border-bottom:1p
 </style>
 </head>
 <body>
-{% set company = snapshot.company %}{% set sale = snapshot.sale %}
+{% set company = snapshot.company %}{% set sale = snapshot.sale %}{% set inclusive = sale.get('vat_price_mode') == 'inclusive' %}
 <div class="controls"><button type="button" id="print-now">พิมพ์เอกสาร</button></div>
 <article class="sheet">
   <div class="top">
@@ -30,9 +30,9 @@ table{border-collapse:collapse;width:100%;margin-top:13px}th,td{border-bottom:1p
     <div><div class="type">{{ 'ใบกำกับภาษี (ร่างทดสอบ)' if document.kind == 'tax_invoice' else 'ใบเสร็จรับเงิน (ร่างทดสอบ)' }}</div><div>เลขที่ {{ document.number }}</div><div class="small">ออกเมื่อ {{ issued_local.strftime('%Y-%m-%d %H:%M') }} เวลาไทย</div><div class="small">อ้างอิงบิล #{{ sale.id }}</div></div>
   </div>
   <div class="watermark">ข้อมูลทดสอบเท่านั้น — ไม่ใช่เอกสารภาษีที่ออกใช้งานจริง</div>
-  <div class="info"><div><b>ผู้ซื้อ / ลูกค้า</b><div>{{ sale.customer_name }}</div><div>{{ sale.customer_address }}</div><div class="small">เลขผู้เสียภาษี: {{ sale.customer_tax_id or '—' }}</div></div><div><b>รายละเอียดเอกสาร</b><div>ประเภท {{ 'ใบกำกับภาษี' if document.kind == 'tax_invoice' else 'ใบรับชำระ' }}</div>{% if snapshot.payment %}<div>ชำระ {{ snapshot.payment.amount }} บาท</div><div>วิธี {{ snapshot.payment.method }}</div><div>อ้างอิง {{ snapshot.payment.reference }}</div>{% endif %}</div></div>
-  <table><thead><tr><th>รายการ</th><th class="right">จำนวน</th><th class="right">หน่วยละ</th><th class="right">รวมก่อน VAT</th></tr></thead><tbody>{% for line in sale.lines %}<tr><td>{{ line.name }} <span class="small">{{ line.sku }}</span></td><td class="right">{{ line.quantity }}</td><td class="right">{{ line.price }}</td><td class="right">{{ line.total }}</td></tr>{% endfor %}</tbody></table>
-  <div class="totals">{% if snapshot.order %}<p><span>ส่วนลด</span><span>-{{ snapshot.order.discount }}</span></p><p><span>ค่าจัดส่ง</span><span>+{{ snapshot.order.shipping_fee }}</span></p>{% endif %}<p><span>มูลค่าก่อนภาษี / หลังส่วนลดรวม</span><span>{{ sale.subtotal }}</span></p><p><span>VAT {{ sale.vat_rate }}%</span><span>{{ sale.vat }}</span></p><p class="grand"><span>ยอดขายรวม</span><span>{{ sale.total }} บาท</span></p>{% if snapshot.payment %}<p><span>รับชำระครั้งนี้</span><span>{{ snapshot.payment.amount }} บาท</span></p>{% endif %}</div>
+  <div class="info"><div><b>ผู้ซื้อ / ลูกค้า</b><div>{{ sale.customer_name }}</div><div>{{ sale.customer_address }}</div><div class="small">เลขผู้เสียภาษี: {{ sale.customer_tax_id or '—' }}</div>{% if sale.get('customer_branch') %}<div class="small">{{ 'สำนักงานใหญ่' if sale.customer_branch == '00000' else 'สาขา ' ~ sale.customer_branch }}</div>{% endif %}</div><div><b>รายละเอียดเอกสาร</b><div>ประเภท {{ 'ใบกำกับภาษี' if document.kind == 'tax_invoice' else 'ใบรับชำระ' }}</div>{% if snapshot.payment %}<div>ชำระ {{ snapshot.payment.amount }} บาท</div><div>วิธี {{ snapshot.payment.method }}</div><div>อ้างอิง {{ snapshot.payment.reference }}</div>{% endif %}</div></div>
+  <table><thead><tr><th>รายการ</th><th class="right">จำนวน</th><th class="right">หน่วยละ</th><th class="right">{{ 'รวม VAT' if inclusive else 'รวมก่อน VAT' }}</th></tr></thead><tbody>{% for line in sale.lines %}<tr><td>{{ line.name }} <span class="small">{{ line.sku }}</span></td><td class="right">{{ line.quantity }}</td><td class="right">{{ line.price }}</td><td class="right">{{ line.total }}</td></tr>{% endfor %}</tbody></table>
+  <div class="totals">{% if snapshot.order %}<p><span>ส่วนลด</span><span>-{{ snapshot.order.discount }}</span></p><p><span>ค่าจัดส่ง</span><span>+{{ snapshot.order.shipping_fee }}</span></p>{% endif %}<p><span>มูลค่าก่อน VAT</span><span>{{ sale.subtotal }}</span></p><p><span>VAT {{ sale.vat_rate }}%</span><span>{{ sale.vat }}</span></p><p class="grand"><span>ยอดขายรวม</span><span>{{ sale.total }} บาท</span></p>{% if snapshot.payment %}<p><span>รับชำระครั้งนี้</span><span>{{ snapshot.payment.amount }} บาท</span></p>{% endif %}</div>
   <div class="foot">{{ company.receipt_footer }}<div class="small">เอกสารนี้เป็นร่างเพื่อการทดสอบเท่านั้น ต้องตรวจรูปแบบและข้อกำหนดภาษีก่อนนำไปใช้งานจริง</div></div>
 </article>
 </body>

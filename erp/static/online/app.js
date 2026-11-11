@@ -3,7 +3,7 @@
 'use strict';
 const root = document.getElementById('root');
 const toast = document.getElementById('toast');
-const state = {user:null,csrf:null,view:'dashboard',products:[],customers:[],sales:[],orders:[],expenses:[],users:[],summary:null,cart:new Map(),wh:[],vatRate:7,busy:false,company:{},specialPrices:[],selectedCustomer:0,imageIds:[],posCustomer:0,posPrices:new Map(),posPriceReady:false,posMethod:"cash",salesOutstanding:false,salesCursor:null,search:{}};
+const state = {user:null,csrf:null,view:'dashboard',products:[],customers:[],sales:[],orders:[],expenses:[],users:[],summary:null,cart:new Map(),wh:[],vatRate:7,busy:false,company:{},specialPrices:[],selectedCustomer:0,imageIds:[],posCustomer:0,posPrices:new Map(),posPriceReady:false,posMethod:"cash",salesOutstanding:false,salesCursor:null,search:{},posVatMode:'exclusive',lastSale:null};
 const labels = {dashboard:'ภาพรวมธุรกิจ',pos:'ขายหน้าร้าน POS',wholesale:'ขายส่ง / จัดส่ง',sales:'บิลขาย / ลูกหนี้',inventory:'สินค้าและสต๊อก',customers:'ลูกค้า',expenses:'ค่าใช้จ่าย',reports:'รายงาน',users:'ผู้ใช้งาน',prices:'ราคาพิเศษ',settings:'ตั้งค่าบริษัท'};
 const roleLabels = {admin:'เจ้าของระบบ',sales:'พนักงานขาย',warehouse:'พนักงานคลัง',accountant:'พนักงานบัญชี'};
 const navGroups = [
@@ -120,13 +120,34 @@ function dashboard(){
 function posUnitPrice(product){
  return state.posPrices.get(product.id) ?? product.price;
 }
+function vatAmounts(entered,mode){
+ const rate=Math.round(state.vatRate*100);
+ const vat=Math.round(entered*rate/(mode==='inclusive'?10000+rate:10000));
+ return mode==='inclusive'?{base:entered-vat,vat,total:entered}:{base:entered,vat,total:entered+vat};
+}
+function vatModeSelect(selected='exclusive'){
+ return `<fieldset class="field vat-options"><legend>รูปแบบราคา VAT</legend>
+ <label><input type="radio" name="vat_price_mode" value="exclusive" ${selected==='exclusive'?'checked':''}><span>ราคาก่อน VAT<small>บวก VAT เพิ่ม</small></span></label>
+ <label><input type="radio" name="vat_price_mode" value="inclusive" ${selected==='inclusive'?'checked':''}><span>ราคารวม VAT<small>ถอด VAT จากยอดเดิม</small></span></label></fieldset>`;
+}
+function vatSummary({base,vat,total}){
+ return `<div><span>ยอดก่อน VAT</span><b>${fmt(base/100)}</b></div><div><span>VAT ${state.vatRate}%</span><b>${fmt(vat/100)}</b></div><div class="total"><span>ยอดรวม</span><b>${fmt(total/100)}</b></div>`;
+}
 function posTotals(){
- const subtotal=[...state.cart].reduce((sum,[id,quantity])=>{
+ const entered=[...state.cart].reduce((sum,[id,quantity])=>{
   const product=state.products.find(item=>item.id===id);
   return sum+(product?Math.round(Number(posUnitPrice(product))*100)*quantity:0);
  },0);
- const vat=Math.round(subtotal*state.vatRate/100);
- return {subtotal,vat,total:subtotal+vat};
+ return vatAmounts(entered,state.posVatMode);
+}
+function printerButton(){
+ return '<button type="button" class="btn secondary" data-printer-connect>เชื่อมต่อเครื่องพิมพ์ Bluetooth</button>';
+}
+function salePrintActions(kind){
+ const sale=state.lastSale;
+ return `<div class="toolbar">${printerButton()}${sale?.kind===kind?`
+ <button type="button" class="btn" data-print="${sale.id}">พิมพ์สรุปบิล #${sale.id}</button>
+ <button type="button" class="btn secondary" data-history="${sale.id}">ใบเสร็จ / ใบกำกับภาษี #${sale.id}</button>`:''}</div>`;
 }
 async function loadPosPrices(customerId){
  state.posCustomer=customerId;
@@ -157,7 +178,8 @@ function filterVisibleRows(key){
 function pos(){
  const entries=[...state.cart].map(([id,quantity])=>({product:state.products.find(item=>item.id===id),quantity}))
   .filter(item=>item.product&&item.quantity>0);
- const {subtotal,vat,total}=posTotals();
+ const totals=posTotals();
+ const {total}=totals;
  const products=state.products.map(product=>{
   const photo=state.imageIds.includes(product.id)
    ? `<img class="product-photo" src="/api/extended/products/${product.id}/image" alt="">` : '';
@@ -168,24 +190,34 @@ function pos(){
   `<div class="line"><div><b>${esc(product.name)}</b><small> ${fmt(posUnitPrice(product))} × ${quantity}</small></div>
   <div class="row"><button type="button" class="btn secondary slim qty-control" aria-label="ลดจำนวน ${esc(product.name)}" data-dec="${product.id}">−</button><b>${quantity}</b><button type="button" class="btn secondary slim qty-control" aria-label="เพิ่มจำนวน ${esc(product.name)}" data-add="${product.id}">+</button></div></div>`
  ).join('');
- return `<div class="grid pos-layout"><section class="card catalog" id="pos-catalog" tabindex="-1"><h2>เลือกสินค้า</h2>
+ return `${salePrintActions('pos')}<div class="grid pos-layout"><section class="card catalog" id="pos-catalog" tabindex="-1"><h2>เลือกสินค้า</h2>
  ${searchField('products','ค้นหาสินค้า','พิมพ์ชื่อหรือรหัสสินค้า')}
  <div class="products" data-search-list="products">${products||'<p class="empty">ยังไม่มีสินค้า เพิ่มสินค้าได้จากเมนูสต๊อก</p>'}</div>
  ${products?'<p class="empty" id="no-match-products" role="status" hidden>ไม่พบสินค้า ลองใช้ชื่อหรือรหัสอื่น</p>':''}</section>
  <section class="card cart" id="pos-cart" tabindex="-1"><h2>รายการขาย <span class="count">${entries.reduce((sum,item)=>sum+item.quantity,0)} หน่วย</span></h2>${lines||'<div class="empty">ยังไม่มีสินค้าในตะกร้า</div>'}
- <form id="pos-form">${customerSelect('customer_id',state.posCustomer)}${methodSelect(state.posMethod)}
- <div class="summary"><div><span>ยอดสินค้า</span><b>${fmt(subtotal/100)}</b></div><div><span>VAT ${state.vatRate}%</span><b>${fmt(vat/100)}</b></div>
- <div class="total"><span>ยอดรวม</span><b>${fmt(total/100)}</b></div></div>
+ <form id="pos-form">${customerSelect('customer_id',state.posCustomer)}${methodSelect(state.posMethod)}${vatModeSelect(state.posVatMode)}
+ <div class="summary">${vatSummary(totals)}</div>
  <button class="btn block" ${!entries.length||!state.posPriceReady?'disabled':''}>บันทึกการขายและตัดสต๊อก</button>
- <p class="small-note">เลือกลูกค้าเพื่อตรวจราคาก่อนบันทึก</p></form>
+ <p class="small-note">รูปแบบ VAT ใช้กับราคาสินค้าที่แสดง รวมถึงราคาพิเศษ</p></form>
  <button type="button" class="btn secondary mobile-cart" data-pos-jump="pos-catalog">กลับไปเลือกสินค้า</button></section>
  ${entries.length?`<div class="cart-shortcut"><button type="button" class="btn block" data-pos-jump="pos-cart"><span>ดูรายการขาย</span><strong>${fmt(total/100)}</strong></button></div>`:''}</div>`;
 }
 
-function whTotal(){const subtotal=state.wh.reduce((t,x)=>t+x.quantity*num(x.unit_price),0);return fmt(subtotal);}
-function wholesale(){if(!['admin','sales'].includes(state.user.role))return `<div class="card"><h2>ติดตามออเดอร์ขายส่ง / จัดส่ง</h2>${orderTable()}</div>`;const rows=state.wh.map((x,i)=>{const p=state.products.find(p=>p.id===x.product_id);return `<tr><td>${esc(p?.name||'?')}</td><td class="num">${x.quantity}</td><td class="num">${fmt(x.unit_price)}</td><td class="num">${fmt(x.quantity*num(x.unit_price))}</td><td><button class="btn secondary slim" data-whdel="${i}">ลบ</button></td></tr>`;}).join('');return `<div class="grid g2"><div class="card"><h2>สร้างออเดอร์ขายส่ง / จัดส่ง</h2><form id="wh-add-form"><div class="field"><label>สินค้า</label>${productSelect('product_id')}</div><div class="grid g2">${field('จำนวนแพ็ค / หน่วย','quantity','number','1','min="1" step="1" required')}${field('ราคาส่งต่อหน่วย ก่อน VAT','unit_price','number','','min="0.01" step="0.01" required')}</div><button class="btn secondary block">เพิ่มสินค้าในออเดอร์</button></form><div class="tablewrap desktop-table"><table><thead><tr><th>สินค้า</th><th class="num">จำนวน</th><th class="num">ราคาส่ง</th><th class="num">รวม</th><th></th></tr></thead><tbody>${rows||'<tr><td colspan="5" class="empty">ยังไม่มีสินค้า</td></tr>'}</tbody></table></div><div class="summary"><div><b>ยอดสินค้าก่อนส่วนลด / VAT</b><strong>${whTotal()}</strong></div></div></div><div class="card"><h2>ข้อมูลลูกค้าและการจัดส่ง</h2><form id="wh-form">${customerSelect()}<div class="field"><label>รูปแบบรับสินค้า</label><select name="delivery_mode">${opt('delivery','จัดส่งถึงร้าน')}${opt('pickup','รับเองที่โกดัง')}</select></div>${field('วันนัดส่ง','delivery_date','date',new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Bangkok',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date()))}${field('ที่อยู่จัดส่ง','address','text','','maxlength="1000"')}${field('โทรศัพท์ติดต่อ','phone','tel','','maxlength="30"')}${field('ชื่อคนขับรถ','driver','text','','maxlength="100"')}<div class="grid g2">${field('ส่วนลด (บาท)','discount','number','0.00','min="0" step="0.01" required')}${field('ค่าจัดส่ง (บาท)','shipping_fee','number','0.00','min="0" step="0.01" required')}</div>${methodSelect()}${field('หมายเหตุ','note','text','','maxlength="600"')}<button class="btn block" ${!state.wh.length?'disabled':''}>ยืนยันออเดอร์ขายส่ง</button></form><div class="small-note">ยืนยันแล้วตัดสต๊อกทันที และสถานะจัดส่งสามารถติดตามต่อด้านล่าง</div></div></div><div class="card"><h2>สถานะออเดอร์จัดส่ง</h2>${orderTable()}</div>`;}
+function whEntered(){
+ return state.wh.reduce((sum,line)=>sum+line.quantity*Math.round(num(line.unit_price)*100),0);
+}
+function updateWholesaleTotal(){
+ const form=$('wh-form');
+ const summary=$('wh-vat-total');
+ if(!form||!summary)return;
+ const values=f(form);
+ const entered=whEntered()-Math.round(num(values.discount)*100)
+  +(values.delivery_mode==='pickup'?0:Math.round(num(values.shipping_fee)*100));
+ summary.innerHTML=entered<0?'<div>ส่วนลดเกินยอดสินค้า</div>':vatSummary(vatAmounts(entered,values.vat_price_mode));
+}
+function wholesale(){if(!['admin','sales'].includes(state.user.role))return `<div class="card"><h2>ติดตามออเดอร์ขายส่ง / จัดส่ง</h2>${orderTable()}</div>`;const rows=state.wh.map((x,i)=>{const p=state.products.find(p=>p.id===x.product_id);return `<tr><td>${esc(p?.name||'?')}</td><td class="num">${x.quantity}</td><td class="num">${fmt(x.unit_price)}</td><td class="num">${fmt(x.quantity*num(x.unit_price))}</td><td><button class="btn secondary slim" data-whdel="${i}">ลบ</button></td></tr>`;}).join('');return `${salePrintActions('wholesale')}<div class="grid g2"><div class="card"><h2>สร้างออเดอร์ขายส่ง / จัดส่ง</h2><form id="wh-add-form"><div class="field"><label>สินค้า</label>${productSelect('product_id')}</div><div class="grid g2">${field('จำนวนแพ็ค / หน่วย','quantity','number','1','min="1" step="1" required')}${field('ราคาส่งต่อหน่วย','unit_price','number','','min="0.01" step="0.01" required')}</div><button class="btn secondary block">เพิ่มสินค้าในออเดอร์</button></form><div class="tablewrap desktop-table"><table><thead><tr><th>สินค้า</th><th class="num">จำนวน</th><th class="num">ราคาส่ง</th><th class="num">รวม</th><th></th></tr></thead><tbody>${rows||'<tr><td colspan="5" class="empty">ยังไม่มีสินค้า</td></tr>'}</tbody></table></div><div class="summary"><div><b>ยอดสินค้าก่อนส่วนลด</b><strong>${fmt(whEntered()/100)}</strong></div></div></div><div class="card"><h2>ข้อมูลลูกค้าและการจัดส่ง</h2><form id="wh-form">${customerSelect()}<div class="field"><label>รูปแบบรับสินค้า</label><select name="delivery_mode">${opt('delivery','จัดส่งถึงร้าน')}${opt('pickup','รับเองที่โกดัง')}</select></div>${field('วันนัดส่ง','delivery_date','date',new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Bangkok',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date()))}${field('ที่อยู่จัดส่ง','address','text','','maxlength="1000"')}${field('โทรศัพท์ติดต่อ','phone','tel','','maxlength="30"')}${field('ชื่อคนขับรถ','driver','text','','maxlength="100"')}<div class="grid g2">${field('ส่วนลด (บาท)','discount','number','0.00','min="0" step="0.01" required')}${field('ค่าจัดส่ง (บาท)','shipping_fee','number','0.00','min="0" step="0.01" required')}</div>${methodSelect()}${vatModeSelect()}${field('หมายเหตุ','note','text','','maxlength="600"')}<p class="small-note">รูปแบบ VAT ใช้กับราคาสินค้า ส่วนลด และค่าจัดส่ง</p><div class="summary" id="wh-vat-total"></div><button class="btn block" ${!state.wh.length?'disabled':''}>ยืนยันออเดอร์ขายส่ง</button></form><div class="small-note">ยืนยันแล้วตัดสต๊อกทันที และสถานะจัดส่งสามารถติดตามต่อด้านล่าง</div></div></div><div class="card"><h2>สถานะออเดอร์จัดส่ง</h2>${orderTable()}</div>`;}
 const statusName={pending:'รอเตรียม',packing:'กำลังจัดสินค้า',out_for_delivery:'กำลังนำส่ง',delivered:'ส่งสำเร็จ',ready:'พร้อมรับ',picked_up:'รับสินค้าแล้ว'};
-function orderTable(){if(!state.orders.length)return '<div class="empty">ยังไม่มีออเดอร์ขายส่ง</div>';return `<div class="tablewrap"><table><thead><tr><th>เลขบิล</th><th>ลูกค้า</th><th>วิธีรับ</th><th>ยอด</th><th>สถานะ</th><th></th></tr></thead><tbody>${state.orders.map(o=>{const done=['delivered','picked_up'].includes(o.status);return `<tr><td>#${o.id}</td><td>${esc(o.customer)}</td><td>${o.mode==='pickup'?'รับเอง':'จัดส่ง'}</td><td>${fmt(o.total)}</td><td><span class="status ${esc(o.status)}">${esc(statusName[o.status]||o.status)}</span></td><td><div class="row">${done?'':`<button class="btn slim" data-next="${o.id}">อัปเดตขั้นต่อไป</button>`}<button class="btn secondary slim" data-note="${o.id}">พิมพ์ใบส่งสินค้า</button></div></td></tr>`;}).join('')}</tbody></table></div>`;}
+function orderTable(){if(!state.orders.length)return '<div class="empty">ยังไม่มีออเดอร์ขายส่ง</div>';return `<div class="tablewrap"><table><thead><tr><th>เลขบิล</th><th>ลูกค้า</th><th>วิธีรับ</th><th>ยอด</th><th>สถานะ</th><th></th></tr></thead><tbody>${state.orders.map(o=>{const done=['delivered','picked_up'].includes(o.status);return `<tr><td>#${o.id}</td><td>${esc(o.customer)}</td><td>${o.mode==='pickup'?'รับเอง':'จัดส่ง'}</td><td>${fmt(o.total)}</td><td><span class="status ${esc(o.status)}">${esc(statusName[o.status]||o.status)}</span></td><td><div class="row">${done?'':`<button class="btn slim" data-next="${o.id}">อัปเดตขั้นต่อไป</button>`}<button class="btn secondary slim" data-note="${o.id}">พิมพ์ใบส่งสินค้า</button>${state.user.role==='warehouse'?'':`<button type="button" class="btn secondary slim" data-history="${o.id}">ใบเสร็จ / ใบกำกับภาษี</button>`}</div></td></tr>`;}).join('')}</tbody></table></div>`;}
 function tableSales(items,allowPay=true){if(!items.length)return '<div class="empty">ยังไม่มีรายการขาย</div>';return `<div class="tablewrap"><table><thead><tr><th>เลข</th><th>วันที่</th><th>ลูกค้า</th><th class="num">รวม</th><th class="num">ค้างชำระ</th><th>ดำเนินการ</th></tr></thead><tbody>${items.map(s=>`<tr><td>#${s.id}</td><td>${formatDate(s.date)}</td><td>${esc(s.customer)}</td><td class="num">${fmt(s.total)}</td><td class="num">${fmt(s.balance)}<small class="muted"> ${num(s.balance)===0?'ชำระครบ':num(s.paid)>0?'ชำระบางส่วน':'ค้างชำระ'}</small></td><td><div class="row"><button class="btn secondary slim" data-print="${s.id}">พิมพ์สรุป</button><button class="btn secondary slim" data-history="${s.id}">ชำระ / เอกสาร</button><button class="btn secondary slim" data-op-sale="${s.id}">แนบสลิป</button>${allowPay&&num(s.balance)>0&&['admin','accountant'].includes(state.user.role)?`<button class="btn slim" data-pay="${s.id}">รับชำระ</button>`:''}</div></td></tr>`).join('')}</tbody></table></div>`;}
 function sales(){
  return `<div class="card"><h2>บิลขายและลูกหนี้</h2><div class="row"><button type="button" class="btn secondary" data-sales-filter="all" aria-pressed="${!state.salesOutstanding}">บิลทั้งหมด</button>
@@ -216,7 +248,32 @@ function prices(){
 }
 function settings(){const c=state.company||{};return `<div class="card"><h2>ข้อมูลบริษัทสำหรับเอกสาร</h2><form id="company-form">${field('ชื่อจดทะเบียน','legal_name','text',c.legal_name||'','required')}${field('เลขผู้เสียภาษี 13 หลัก','tax_id','text',c.tax_id||'','pattern="[0-9]{13}"')}${field('ชื่อสาขา','branch','text',c.branch||'สำนักงานใหญ่','required')}${field('ที่อยู่จดทะเบียน','address','text',c.address||'','required')}${field('เบอร์ติดต่อ','phone','tel',c.phone||'')}${field('ข้อความท้ายเอกสาร','receipt_footer','text',c.receipt_footer||'')}<div class="field"><label>ขนาดกระดาษเริ่มต้น</label><select name="default_paper">${opt('a4','A4',c.default_paper)}${opt('58','สลิป 58 มม.',c.default_paper)}</select></div><button class="btn">บันทึกข้อมูลบริษัท</button></form><p>เอกสารทุกฉบับยังเป็นร่างทดสอบ ไม่ใช่เอกสารภาษีที่รับรองแล้ว</p></div><div class="card"><h2>นำเข้าและส่งออก Excel</h2><p>นำเข้าเฉพาะข้อมูลใหม่ ไม่แก้สต๊อกเดิมหรือปรับราคาโดยอัตโนมัติ</p><form id="excel-form"><select name="entity">${opt('products','สินค้า')}${opt('customers','ลูกค้า')}</select><input name="file" type="file" accept=".xlsx" required><button class="btn">นำเข้า Excel</button></form><a href="/api/extended/excel/products">ส่งออกสินค้า XLSX</a> · <a href="/api/extended/excel/customers">ส่งออกลูกค้า XLSX</a></div>`;}
 function inventoryWithExtras(){const writable=['admin','warehouse'].includes(state.user.role);return inventory()+`${writable?`<div class="card"><h2>เพิ่มรูปสินค้า</h2><form id="image-form"><div class="field"><label>สินค้า</label>${productSelect()}</div><input name="image" type="file" accept="image/jpeg,image/png,image/webp" required><button class="btn">อัปโหลดรูป (ไม่เกิน 1 MB)</button></form></div>`:''}<div class="card"><h2>ภาพสินค้า</h2><div class="products">${state.products.filter(p=>state.imageIds.includes(p.id)).map(p=>`<div class="product"><img class="product-photo" src="/api/extended/products/${p.id}/image" alt="${esc(p.name)}"><div>${esc(p.name)}</div></div>`).join('')||'ยังไม่มีภาพสินค้า'}</div></div>`;}
-async function showHistory(id){document.getElementById('sale-history')?.remove();const [history,docs]=await Promise.all([api(`/api/extended/sales/${Number(id)}/payments`),api(`/api/extended/sales/${Number(id)}/documents`)]);const canIssue=['admin','accountant'].includes(state.user.role);$('view').insertAdjacentHTML('afterbegin',`<div class="card" id="sale-history"><h2>ประวัติชำระบิล #${id}</h2><p>ค้าง ${fmt(history.balance)} จากยอดรวม ${fmt(history.total)}</p><div class="tablewrap"><table><tbody>${history.payments.map(p=>`<tr><td>${formatDate(p.date)}<br>${esc(p.reference)}</td><td>${esc(p.method)}</td><td>${fmt(p.amount)}</td><td>${canIssue?`<button class="btn secondary slim" data-issue-doc="receipt" data-sale-id="${id}" data-payment-id="${p.id}">ออกใบเสร็จร่าง</button>`:''}</td></tr>`).join('')}</tbody></table></div>${canIssue?`<button class="btn slim" data-issue-doc="tax_invoice" data-sale-id="${id}">ออกใบกำกับภาษีร่าง</button>`:''}<h3>เอกสารที่บันทึกไว้ (แก้ย้อนหลังไม่ได้)</h3>${docs.items.map(d=>`<p>${esc(d.number)} (${esc(d.kind)}) · <a target="_blank" rel="noopener" href="/api/extended/documents/${d.id}/print?paper=a4">A4</a> · <a target="_blank" rel="noopener" href="/api/extended/documents/${d.id}/print?paper=58">58 มม.</a></p>`).join('')||'ยังไม่มีเอกสาร'}</div>`);window.scrollTo({top:0,behavior:'smooth'});}
+async function showHistory(id){
+ const view=$('view');
+ const [history,docs]=await Promise.all([api(`/api/extended/sales/${Number(id)}/payments`),api(`/api/extended/sales/${Number(id)}/documents`)]);
+ if(!view?.isConnected||root.dataset.operations)return;
+ $('sale-history')?.remove();
+ const canIssue=['admin','accountant'].includes(state.user.role);
+ const canIssueTax=canIssue&&!docs.items.some(doc=>doc.kind==='tax_invoice');
+ view.insertAdjacentHTML('afterbegin',`<section class="card" id="sale-history" tabindex="-1">
+ <div class="row space"><h2>เอกสารและการชำระ · บิล #${id}</h2><button type="button" class="btn secondary slim" data-close-history>ปิด</button></div>
+ <p>ยอดรวม ${fmt(history.total)} · ค้างชำระ ${fmt(history.balance)}</p>
+ ${history.payments.length?`<div class="tablewrap"><table><tbody>${history.payments.map(p=>`<tr><td>${formatDate(p.date)}</td><td>${esc(p.method)}</td><td>${fmt(p.amount)}</td><td>${canIssue?`<button type="button" class="btn secondary slim" data-issue-doc="receipt" data-sale-id="${id}" data-payment-id="${p.id}">ออกใบเสร็จร่าง</button>`:''}</td></tr>`).join('')}</tbody></table></div>`:'<p>ยังไม่มีรายการรับชำระ</p>'}
+ ${canIssueTax?`<details class="invoice-details"><summary>ออกใบกำกับภาษีร่าง</summary>
+ <form id="tax-invoice-form"><input type="hidden" name="sale_id" value="${id}">
+ ${field('ชื่อผู้ซื้อ / ชื่อนิติบุคคล','buyer_name','text',history.buyer.name,'required maxlength="200"')}
+ <div class="field"><label for="buyer_address">ที่อยู่สำหรับใบกำกับภาษี</label><textarea id="buyer_address" name="buyer_address" required maxlength="1000" rows="3">${esc(history.buyer.address)}</textarea></div>
+ <div class="grid g2">${field('เลขผู้เสียภาษี 13 หลัก','buyer_tax_id','text',history.buyer.tax_id,'required inputmode="numeric" maxlength="13" pattern="[0-9]{13}"')}
+ ${field('รหัสสาขา (00000 สำหรับสำนักงานใหญ่)','buyer_branch','text','','inputmode="numeric" maxlength="5" pattern="[0-9]{5}"')}</div>
+ <button class="btn">บันทึกใบกำกับภาษีร่าง</button></form></details>`:''}
+ <h3>เอกสารที่บันทึกไว้</h3>
+ ${docs.items.map(d=>`<div class="row document-actions"><strong>${esc(d.number)}</strong>
+ <a class="btn secondary slim" target="_blank" rel="noopener" href="/api/extended/documents/${d.id}/print?paper=a4">A4</a>
+ <a class="btn secondary slim" target="_blank" rel="noopener" href="/api/extended/documents/${d.id}/print?paper=58">58 มม.</a>
+ <button type="button" class="btn secondary slim" data-thermal-document="${d.id}">พิมพ์ Bluetooth</button></div>`).join('')||'<p>ยังไม่มีเอกสาร</p>'}</section>`);
+ $('sale-history').focus({preventScroll:true});
+ $('sale-history').scrollIntoView({block:'start'});
+}
 
 function render(){
  if(!state.user||root.dataset.operations)return;
@@ -242,6 +299,7 @@ function render(){
   }
  }
  if(state.view==='customers')filterVisibleRows('customers');
+ if(state.view==='wholesale')updateWholesaleTotal();
 }
 function showReset(id){const user=state.users.find(x=>x.id===Number(id));if(!user)return;const el=$('view');el.insertAdjacentHTML('afterbegin',`<div class="card"><h2>ตั้งรหัสใหม่: ${esc(user.username)}</h2><form id="reset-password-form"><input type="hidden" name="user_id" value="${user.id}">${field('รหัสผ่านใหม่','password','password','','autocomplete="new-password" required minlength="12" maxlength="128"')}${field('ยืนยันรหัสผ่านใหม่','confirm_password','password','','autocomplete="new-password" required minlength="12" maxlength="128"')}<button class="btn">บันทึกรหัสใหม่</button></form><div class="small-note">ให้ส่งรหัสใหม่แก่พนักงานผ่านช่องทางส่วนตัวเท่านั้น</div></div>`);window.scrollTo({top:0,behavior:'smooth'});}
 async function doLogin(form){const values=f(form);await getCsrf();const r=await api('/auth/login',{method:'POST',body:{username:values.username,password:values.password}});state.csrf=r.csrf_token;state.user=await api('/auth/me');state.view='dashboard';shell();await refresh();}
@@ -250,8 +308,13 @@ async function confirmSale(kind,form){
  if(kind==='pos'&&(!state.posPriceReady||Number(v.customer_id)!==state.posCustomer))throw Error('กรุณาเลือกลูกค้าและรอตรวจราคา');
  const lines=kind==='pos'?[...state.cart].filter(([id,q])=>q>0).map(([id,q])=>({product_id:Number(id),quantity:q})):state.wh.map(x=>({...x}));
  if(!lines.length)throw Error('กรุณาเลือกสินค้าก่อน');
- const body={kind,customer_id:Number(v.customer_id),lines,method:v.method,delivery_mode:kind==='pos'?'pickup':v.delivery_mode};
+ const body={kind,vat_price_mode:v.vat_price_mode,customer_id:Number(v.customer_id),lines,method:v.method,delivery_mode:kind==='pos'?'pickup':v.delivery_mode};
  if(kind==='pos')body.expected_total=(posTotals().total/100).toFixed(2);
+ if(kind==='wholesale'){
+  const entered=whEntered()-Math.round(num(v.discount)*100)+(v.delivery_mode==='pickup'?0:Math.round(num(v.shipping_fee)*100));
+  if(entered<0)throw Error('ส่วนลดเกินยอดสินค้า');
+  body.expected_total=(vatAmounts(entered,v.vat_price_mode).total/100).toFixed(2);
+ }
  if(kind==='wholesale')Object.assign(body,{delivery_date:v.delivery_date,address:v.address,phone:v.phone,driver:v.driver,discount:moneyInput(v.discount),shipping_fee:moneyInput(v.shipping_fee),note:v.note});
  if(kind==='wholesale'&&body.delivery_mode==='pickup')body.shipping_fee='0.00';
  // Keep only a SHA-256 fingerprint + idempotency key in session storage, never the order or PII.
@@ -269,8 +332,11 @@ async function confirmSale(kind,form){
   throw err;
  }
  sessionStorage.removeItem(slot);
- state.cart.clear();state.wh=[];
- warn(`บันทึกบิล #${x.id} สำเร็จ`);navigate('sales');
+ if(kind==='pos')state.cart.clear();
+ else{state.wh=[];form.reset();}
+ state.lastSale={id:x.id,kind};
+ warn(`บันทึกบิล #${x.id} สำเร็จ`);
+ await refresh();
 }
 async function send(form){if(state.busy)return;state.busy=true;const submit=form.querySelector('button[type=submit],button:not([type])');if(submit)submit.disabled=true;try{
  const id=form.id,v=f(form);
@@ -281,6 +347,12 @@ async function send(form){if(state.busy)return;state.busy=true;const submit=form
   else if(id==='company-form'){state.company=await api('/api/extended/company',{method:'POST',body:{legal_name:v.legal_name,tax_id:v.tax_id,branch:v.branch,address:v.address,phone:v.phone,receipt_footer:v.receipt_footer,default_paper:v.default_paper}});warn('บันทึกข้อมูลบริษัทแล้ว');}
   else if(id==='image-form'||id==='excel-form'){const endpoint=id==='image-form'?`/api/extended/products/${Number(v.product_id)}/image`:`/api/extended/excel/${v.entity}/import`;const response=await fetch(endpoint,{method:'POST',credentials:'same-origin',headers:{'X-CSRFToken':state.csrf},body:new FormData(form)});const result=await response.json().catch(()=>({}));if(!response.ok)throw Error(result.error||`อัปโหลดไม่สำเร็จ ${response.status}`);warn('นำเข้าข้อมูลสำเร็จ');await refresh();}
   else if(id==='reset-password-form'){if(v.password!==v.confirm_password)throw Error('รหัสผ่านยืนยันไม่ตรงกัน');await api(`/users/${Number(v.user_id)}/password`,{method:'POST',body:{password:v.password}});warn('ตั้งรหัสใหม่แล้ว');render();}
+ else if(id==='tax-invoice-form'){
+  const saleId=Number(v.sale_id);
+  const result=await api('/api/extended/documents',{method:'POST',body:{kind:'tax_invoice',sale_id:saleId,buyer:{name:v.buyer_name,address:v.buyer_address,tax_id:v.buyer_tax_id,branch:v.buyer_branch}}});
+  warn(`จัดทำร่าง ${result.number} แล้ว`);
+  await showHistory(saleId);
+ }
  else if(id==='pos-form')await confirmSale('pos',form);
  else if(id==='wh-form')await confirmSale('wholesale',form);
  else if(id==='wh-add-form'){const p=state.products.find(x=>x.id===Number(v.product_id));const qty=Number(v.quantity);const price=Number(v.unit_price);if(!p||!Number.isInteger(qty)||qty<1||qty>p.stock||!Number.isFinite(price)||price<=0)throw Error('ตรวจสอบสินค้า จำนวนและราคาขายส่ง');const found=state.wh.find(x=>x.product_id===p.id);if(found)throw Error('รายการสินค้าซ้ำ โปรดลบรายการเดิมก่อน');state.wh.push({product_id:p.id,quantity:qty,unit_price:moneyInput(price)});render();}
@@ -299,13 +371,16 @@ async function printDelivery(id){
  window.print();
 }
 document.addEventListener('input',event=>{
+ if(event.target.form?.id==='wh-form')updateWholesaleTotal();
  const key=event.target.dataset.search;
  if(!key)return;
  state.search[key]=event.target.value;
  filterVisibleRows(key);
 });
 document.addEventListener('change',async event=>{
+ if(event.target.form?.id==='wh-form'){updateWholesaleTotal();return;}
  if(event.target.form?.id!=='pos-form')return;
+ if(event.target.name==='vat_price_mode'){state.posVatMode=event.target.value;render();$('pos-form').querySelector('[name="vat_price_mode"]:checked').focus();return;}
  if(event.target.name==='method'){state.posMethod=event.target.value;return;}
  if(event.target.name==='customer_id'){
   try{await loadPosPrices(Number(event.target.value));}catch(err){warn(err.message);}
@@ -332,7 +407,7 @@ document.addEventListener('click',async event=>{
  }
  if(btn.id==='show-forgot'){showForgot();return;}
  if(btn.id==='show-login'){showLogin();return;}
- if(btn.id==='logout'){await api('/auth/logout',{method:'POST',body:{}});state.user=null;state.csrf=null;state.search={};state.cart.clear();state.wh=[];state.posCustomer=0;state.posPrices.clear();state.posPriceReady=false;state.posMethod='cash';showLogin();return;}
+ if(btn.id==='logout'){await api('/auth/logout',{method:'POST',body:{}});state.user=null;state.csrf=null;state.search={};state.cart.clear();state.wh=[];state.posCustomer=0;state.posPrices.clear();state.posPriceReady=false;state.posMethod='cash';state.posVatMode='exclusive';state.lastSale=null;window.erpPrinter.disconnect();showLogin();return;}
  if(btn.dataset.add){const id=Number(btn.dataset.add);const p=state.products.find(p=>p.id===id);if(!p)return;const qty=state.cart.get(id)||0;if(qty>=p.stock)throw Error('สินค้าไม่พอ');state.cart.set(id,qty+1);render();return;}
  if(btn.dataset.dec){const id=Number(btn.dataset.dec),qty=(state.cart.get(id)||0)-1;if(qty<=0)state.cart.delete(id);else state.cart.set(id,qty);render();return;}
  if(btn.dataset.whdel!==undefined){state.wh.splice(Number(btn.dataset.whdel),1);render();return;}
@@ -343,7 +418,19 @@ document.addEventListener('click',async event=>{
  if(btn.dataset.activate){await api(`/users/${Number(btn.dataset.activate)}/activate`,{method:'POST',body:{}});warn('อนุมัติผู้ใช้งานแล้ว');await refresh();return;}
  if(btn.dataset.reset){showReset(btn.dataset.reset);return;}
   if(btn.dataset.staff){showStaff(btn.dataset.staff);return;}
-  if(btn.dataset.history){await showHistory(btn.dataset.history);return;}
+  if(btn.hasAttribute('data-close-history')){$('sale-history')?.remove();return;}
+ if(btn.hasAttribute('data-printer-connect')){window.erpPrinter.open();return;}
+ if(btn.dataset.thermalDocument){
+  if(!window.erpPrinter.connected()){window.erpPrinter.open();warn('เชื่อมต่อเครื่องพิมพ์ แล้วกดพิมพ์ Bluetooth อีกครั้ง');return;}
+  btn.disabled=true;
+  try{
+   const doc=await api(`/api/extended/documents/${Number(btn.dataset.thermalDocument)}/thermal`);
+   await window.erpPrinter.print(doc);
+   warn('ส่งข้อมูลไปยังเครื่องพิมพ์แล้ว');
+  }finally{btn.disabled=false;}
+  return;
+ }
+ if(btn.dataset.history){await showHistory(btn.dataset.history);return;}
   if(btn.dataset.loadPrices){state.selectedCustomer=Number($('price-customer').value);if(!state.selectedCustomer)throw Error('เลือกลูกค้าก่อน');state.specialPrices=(await api(`/api/extended/prices/${state.selectedCustomer}`)).items;render();return;}
   if(btn.dataset.removePrice){await api(`/api/extended/prices/${state.selectedCustomer}/${Number(btn.dataset.removePrice)}`,{method:'DELETE'});state.specialPrices=(await api(`/api/extended/prices/${state.selectedCustomer}`)).items;render();return;}
   if(btn.dataset.issueDoc){const payload={kind:btn.dataset.issueDoc,sale_id:Number(btn.dataset.saleId)};if(payload.kind==='receipt')payload.payment_id=Number(btn.dataset.paymentId);const result=await api('/api/extended/documents',{method:'POST',body:payload});warn(`จัดทำร่าง ${result.number} แล้ว`);await showHistory(payload.sale_id);return;}
