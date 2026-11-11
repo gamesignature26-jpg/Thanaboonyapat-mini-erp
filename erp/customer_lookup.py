@@ -52,10 +52,7 @@ def lookup_customers():
     customers = list(db.session.scalars(query.order_by(Customer.id).limit(limit + 1)))
     page = customers[:limit]
     return {
-        "items": [
-            {"id": c.id, "name": c.name, "tax_id": c.tax_id, "address": c.address}
-            for c in page
-        ],
+        "items": [{"id": c.id, "name": c.name, "tax_id": c.tax_id, "address": c.address} for c in page],
         "next_after": page[-1].id if len(customers) > limit else None,
     }
 
