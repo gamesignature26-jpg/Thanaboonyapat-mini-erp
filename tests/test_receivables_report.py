@@ -21,8 +21,16 @@ def test_receivables_reports_partial_and_fully_paid_sales(seeded, client):
     assert sale1.status_code == 201
     assert sale2.status_code == 201
     id1, id2 = sale1.json["id"], sale2.json["id"]
-    assert post(client, token, f"/sales/{id1}/payments", {"amount": "100.00", "reference": "report-partial-001"}).status_code == 201
-    assert post(client, token, f"/sales/{id2}/payments", {"amount": "107.00", "reference": "report-full-002"}).status_code == 201
+    assert (
+        post(
+            client, token, f"/sales/{id1}/payments", {"amount": "100.00", "reference": "report-partial-001"}
+        ).status_code
+        == 201
+    )
+    assert (
+        post(client, token, f"/sales/{id2}/payments", {"amount": "107.00", "reference": "report-full-002"}).status_code
+        == 201
+    )
     result = client.get("/api/reports/receivables")
     assert result.status_code == 200
     assert result.json["total_outstanding"] == "114.00"
