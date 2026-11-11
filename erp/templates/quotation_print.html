@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="th">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>ใบเสนอราคา (ร่าง) {{ quote.number }}</title></head>
+<body>
+<main>
+<h1>ใบเสนอราคา (ร่าง) / QUOTATION DRAFT</h1>
+<p><strong>ข้อมูลตัวอย่าง — เอกสารยังไม่ใช่ใบกำกับภาษีหรือหลักฐานรับชำระ</strong></p>
+<p>เลขอ้างอิงภายใน: {{ quote.number }} · วันที่: {{ quote.date }}</p>
+<p>ลูกค้า: {{ quote.customer.name }} · เลขผู้เสียภาษี: {{ quote.customer.tax_id or '-' }}</p>
+<p>ที่อยู่: {{ quote.customer.address }}</p>
+<p>สถานะ: {{ quote.status }} · วันหมดอายุ: {{ quote.expires_on or '-' }}</p>
+<table>
+<thead><tr><th>สินค้า</th><th>รหัส</th><th>จำนวน</th><th>ราคาต่อหน่วย</th></tr></thead>
+<tbody>
+{% for line in quote.lines %}
+<tr><td>{{ line.name }}</td><td>{{ line.sku }}</td><td>{{ line.quantity }}</td><td>{{ line.unit_price }}</td></tr>
+{% endfor %}
+</tbody>
+</table>
+<p>รูปแบบ VAT: {{ quote.vat_price_mode }}</p>
+<p>มูลค่าก่อน VAT: {{ quote.subtotal }} บาท</p>
+<p>VAT {{ quote.vat_rate }}%: {{ quote.vat }} บาท</p>
+<p><strong>ยอดรวมเสนอราคา: {{ quote.total }} บาท</strong></p>
+<p>หมายเหตุ: {{ quote.note or '-' }}</p>
+<p>เอกสารร่างนี้ไม่ตัดสต็อก ไม่ผูกมัดราคาขาย และไม่ใช่ใบเสร็จรับเงิน</p>
+</main>
+</body></html>
