@@ -152,12 +152,11 @@ def main():
             page.get_by_role("button", name="ดูรายละเอียด", exact=True).click()
             page.locator("#quote-status-note").fill("Synthetic quotation sent to customer")
             page.get_by_role("button", name="บันทึกว่าส่งแล้ว", exact=True).click()
-            page.get_by_role("button", name="ลูกค้ายืนยัน", exact=True).click()
             page.locator("#quote-status-note").fill("Synthetic customer agreed in test")
             page.get_by_role("button", name="ลูกค้ายืนยัน", exact=True).click()
             page.locator('#quote-convert-form select[name="delivery_mode"]').select_option("pickup")
             page.get_by_role("button", name="ยืนยันแปลงเป็นบิลขาย", exact=True).click()
-            page.get_by_text("แปลงเป็นบิลขาย #2 แล้ว", exact=True).wait_for()
+            page.locator("#quote-detail").get_by_text("แปลงเป็นบิลขาย #2 แล้ว", exact=True).wait_for()
 
             page.get_by_role("button", name="เมนูทั้งหมด", exact=True).click()
             page.get_by_role("button", name="รายสัปดาห์ / ค่าแรง / หลักฐาน", exact=True).click()
