@@ -148,3 +148,25 @@ def test_stale_customer_specific_price_rejected_even_if_total_might_match(seeded
     change = post(client, token, "/api/extended/prices", {"customer_id": cid, "product_id": pid, "price": "90.00"})
     assert change.status_code == 200
     assert post(client, token, f"/api/quotations/{qid}/convert", {}).status_code == 409
+
+
+def test_conversion_rejects_different_delivery_payload_on_retry(seeded, client, app):
+    token, pid, cid = seeded
+    qid = make_accepted(client, token, pid, cid, "synthetic-different-delivery-00001")
+    path = f"/api/quotations/{qid}/convert"
+    first = post(client, token, path, {"delivery_mode": "pickup"})
+    assert first.status_code == 201
+    changed = post(client, token, path, {"delivery_mode": "delivery", "address": "Changed delivery site"})
+    assert changed.status_code == 409
+    with app.app_context():
+        assert db.session.scalar(db.select(db.func.count(Sale.id))) == 1
+        assert db.session.get(Product, pid).stock == 8
+
+
+def test_warehouse_and_accountant_cannot_convert_accepted_quote(seeded, client):
+    token, pid, cid = seeded
+    qid = make_accepted(client, token, pid, cid, "synthetic-conversion-role-00001")
+    account_token = login(client, "accountant")
+    assert post(client, account_token, f"/api/quotations/{qid}/convert", {}).status_code == 403
+    warehouse_token = login(client, "warehouse")
+    assert post(client, warehouse_token, f"/api/quotations/{qid}/convert", {}).status_code == 403
