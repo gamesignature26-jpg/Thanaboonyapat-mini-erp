@@ -301,6 +301,10 @@ function render(){
  const map={dashboard,pos,wholesale,sales,quotations,inventory:inventoryWithExtras,customers,expenses,reports,users,prices,settings};
  view.innerHTML=(map[state.view]||dashboard)();
  view.setAttribute('aria-busy','false');
+ if(quoteDraft&&$('quote-form'))for(const [name,value] of Object.entries(quoteDraft)){
+  const control=$('quote-form').elements.namedItem(name);
+  if(control)control.value=value;
+ }
  if(draft&&$('wh-form'))for(const [name,value] of Object.entries(draft)){
   const control=$('wh-form').elements.namedItem(name);
   if(control)control.value=value;
@@ -369,6 +373,26 @@ async function send(form){if(state.busy)return;state.busy=true;const submit=form
  }
  else if(id==='pos-form')await confirmSale('pos',form);
  else if(id==='wh-form')await confirmSale('wholesale',form);
+ else if(id==='quote-add-form'){
+  const p=state.products.find(x=>x.id===Number(v.product_id));const qty=Number(v.quantity);
+  if(!p||!Number.isInteger(qty)||qty<1||qty>1000000)throw Error('ตรวจสอบสินค้าและจำนวน');
+  if(state.quoteLines.length>=100||state.quoteLines.some(x=>x.product_id===p.id))throw Error('รายการซ้ำหรือเกิน 100 รายการ');
+  state.quoteLines.push({product_id:p.id,quantity:qty});render();
+ }
+ else if(id==='quote-form'){
+  if(!state.quoteLines.length)throw Error('กรุณาเพิ่มรายการเสนอราคา');
+  const payload={customer_id:Number(v.customer_id),vat_price_mode:v.vat_price_mode,expires_on:v.expires_on||null,note:v.note||'',lines:state.quoteLines.map(x=>({...x}))};
+  const bytes=new TextEncoder().encode(JSON.stringify(payload));
+  const hash=[...new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))].map(b=>b.toString(16).padStart(2,'0')).join('');
+  const slot='tb-pending-quote-v1';
+  let pending=null;try{pending=JSON.parse(sessionStorage.getItem(slot)||'null');}catch(_){/* invalid retry metadata */}
+  const request_key=pending?.hash===hash?pending.key:uuid();
+  sessionStorage.setItem(slot,JSON.stringify({hash,key:request_key}));
+  const result=await api('/api/quotations',{method:'POST',body:{...payload,request_key}});
+  sessionStorage.removeItem(slot);
+  state.quoteLines=[];state.quoteSelected=await api(`/api/quotations/${result.id}`);
+  warn(`บันทึกร่าง ${result.number} แล้ว`);await refresh();
+ }
  else if(id==='wh-add-form'){const p=state.products.find(x=>x.id===Number(v.product_id));const qty=Number(v.quantity);const price=Number(v.unit_price);if(!p||!Number.isInteger(qty)||qty<1||qty>p.stock||!Number.isFinite(price)||price<=0)throw Error('ตรวจสอบสินค้า จำนวนและราคาขายส่ง');const found=state.wh.find(x=>x.product_id===p.id);if(found)throw Error('รายการสินค้าซ้ำ โปรดลบรายการเดิมก่อน');state.wh.push({product_id:p.id,quantity:qty,unit_price:moneyInput(price)});render();}
  else if(id==='product-form'){await api('/products',{method:'POST',body:{sku:v.sku,name:v.name,price:moneyInput(v.price)}});warn('เพิ่มสินค้าแล้ว');await refresh();}
  else if(id==='stock-form'){await api('/stock/adjustments',{method:'POST',body:{product_id:Number(v.product_id),delta:Number(v.delta),reason:v.reason}});warn('ปรับสต๊อกแล้ว');await refresh();}
@@ -417,6 +441,8 @@ document.addEventListener('click',async event=>{
   if(btn.dataset.customerServerSearch){const term=state.search.customers||'';const page=await api('/api/customers/lookup?q='+encodeURIComponent(term)+'&limit=100');state.customerLookupResults=page.items;state.customerHistory=null;render();if(page.next_after)warn('แสดง 100 รายชื่อแรก กรุณาระบุคำค้นให้แคบลง');return;}
   if(btn.dataset.customerClear){state.customerLookupResults=null;state.customerHistory=null;state.search.customers='';render();return;}
   if(btn.dataset.customerHistory){state.customerHistory=await api(`/api/customers/${Number(btn.dataset.customerHistory)}/history`);render();$('customer-purchase-history')?.focus({preventScroll:true});return;}
+ if(btn.hasAttribute('data-quote-remove')){state.quoteLines.splice(Number(btn.dataset.quoteRemove),1);render();return;}
+ if(btn.dataset.quoteDetail){state.quoteSelected=await api(`/api/quotations/${Number(btn.dataset.quoteDetail)}`);render();return;}
  if(btn.dataset.salesFilter){state.salesOutstanding=btn.dataset.salesFilter==='open';await refresh();return;}
  if(btn.hasAttribute('data-sales-more')&&state.salesCursor){
   const page=await api(`/api/online/sales?outstanding=${state.salesOutstanding?'1':'0'}&before=${state.salesCursor}`);
