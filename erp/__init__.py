@@ -501,4 +501,8 @@ def create_app(config=None):
 
     app.register_blueprint(customer_lookup_bp)
 
+    from .quotations import bp as quotation_bp
+
+    app.register_blueprint(quotation_bp)
+
     return app
