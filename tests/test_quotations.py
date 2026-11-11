@@ -35,7 +35,7 @@ def test_quotation_does_not_move_stock_create_sale_or_payment(seeded, client, ap
     created = post(client, token, "/api/quotations", quotation(pid, cid))
     assert created.status_code == 201
     assert created.json["number"].startswith("QT-DRAFT-")
-    detail = client.get(f'/api/quotations/{created.json["id"]}')
+    detail = client.get(f"/api/quotations/{created.json['id']}")
     assert detail.status_code == 200
     assert detail.json["status"] == "draft"
     assert detail.json["total"] == "214.00"
@@ -68,7 +68,7 @@ def test_quote_snapshots_customer_and_customer_specific_price(seeded, client, ap
     assert updated.status_code == 200
     made = post(client, token, "/api/quotations", quotation(pid, cid, vat_price_mode="inclusive"))
     assert made.status_code == 201
-    detail_url = f'/api/quotations/{made.json["id"]}'
+    detail_url = f"/api/quotations/{made.json['id']}"
     assert client.get(detail_url).json["total"] == "160.00"
     assert client.get(detail_url).json["lines"][0]["unit_price"] == "80.00"
     with app.app_context():
@@ -100,7 +100,7 @@ def test_quote_listing_and_print_preview_are_private(seeded, client):
     token, pid, cid = seeded
     made = post(client, token, "/api/quotations", quotation(pid, cid))
     assert made.status_code == 201
-    url = f'/api/quotations/{made.json["id"]}/print'
+    url = f"/api/quotations/{made.json['id']}/print"
     page = client.get(url)
     assert page.status_code == 200
     assert "QUOTATION DRAFT" in page.get_data(as_text=True)
