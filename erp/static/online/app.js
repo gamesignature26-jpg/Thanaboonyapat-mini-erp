@@ -3,8 +3,18 @@
 'use strict';
 const root = document.getElementById('root');
 const toast = document.getElementById('toast');
-const state = {user:null,csrf:null,view:'dashboard',products:[],customers:[],sales:[],orders:[],expenses:[],users:[],summary:null,cart:new Map(),wh:[],vatRate:7,busy:false,company:{},specialPrices:[],selectedCustomer:0,imageIds:[],posCustomer:0,posPrices:new Map(),posPriceReady:false,posMethod:"cash",salesOutstanding:false,salesCursor:null};
+const state = {user:null,csrf:null,view:'dashboard',products:[],customers:[],sales:[],orders:[],expenses:[],users:[],summary:null,cart:new Map(),wh:[],vatRate:7,busy:false,company:{},specialPrices:[],selectedCustomer:0,imageIds:[],posCustomer:0,posPrices:new Map(),posPriceReady:false,posMethod:"cash",salesOutstanding:false,salesCursor:null,search:{}};
 const labels = {dashboard:'ภาพรวมธุรกิจ',pos:'ขายหน้าร้าน POS',wholesale:'ขายส่ง / จัดส่ง',sales:'บิลขาย / ลูกหนี้',inventory:'สินค้าและสต๊อก',customers:'ลูกค้า',expenses:'ค่าใช้จ่าย',reports:'รายงาน',users:'ผู้ใช้งาน',prices:'ราคาพิเศษ',settings:'ตั้งค่าบริษัท'};
+const roleLabels = {admin:'เจ้าของระบบ',sales:'พนักงานขาย',warehouse:'พนักงานคลัง',accountant:'พนักงานบัญชี'};
+const navGroups = [
+ ['งานขาย',['dashboard','pos','wholesale','sales']],
+ ['ข้อมูลร้าน',['inventory','customers','prices']],
+ ['หลังร้าน',['expenses','reports','users','settings','operations']],
+];
+const roleViews = {
+ admin:Object.keys(labels), sales:['dashboard','pos','wholesale','sales','inventory','customers','prices'],
+ warehouse:['dashboard','wholesale','inventory'], accountant:['dashboard','wholesale','sales','inventory','customers','expenses','reports'],
+};
 const $=id=>document.getElementById(id);
 const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmt=x=>x===null||x===undefined?'—':new Intl.NumberFormat('th-TH',{style:'currency',currency:'THB'}).format(Number(x||0));
@@ -16,8 +26,8 @@ function warn(msg){toast.textContent=msg;toast.classList.add('show');setTimeout(
 function formatDate(x){if(!x)return '—';const d=new Date(x);return Number.isNaN(d.getTime())?'—':new Intl.DateTimeFormat('th-TH',{dateStyle:'short',timeZone:'Asia/Bangkok'}).format(d);}
 function opt(v,t,selected=''){return `<option value="${esc(v)}" ${String(v)===String(selected)?'selected':''}>${esc(t)}</option>`;}
 function field(label,name,type='text',value='',more=''){return `<div class="field"><label for="${esc(name)}">${esc(label)}</label><input id="${esc(name)}" name="${esc(name)}" type="${esc(type)}" value="${esc(value)}" ${more}></div>`;}
-function customerSelect(name='customer_id',selected=''){return `<div class="field"><label>ลูกค้า</label><select name="${esc(name)}" required><option value="">— เลือกลูกค้า —</option>${state.customers.map(c=>opt(c.id,c.name,selected)).join('')}</select><small>หากไม่มีลูกค้า ให้เพิ่มในเมนูลูกค้าก่อน</small></div>`;}
-function methodSelect(selected='cash'){return `<div class="field"><label>การชำระ</label><select name="method">${opt('cash','เงินสด',selected)}${opt('transfer','โอนเงิน',selected)}${opt('credit','ขายเชื่อ / ค้างชำระ',selected)}</select></div>`;}
+function customerSelect(name='customer_id',selected=''){return `<div class="field"><label>ลูกค้า<select name="${esc(name)}" required><option value="">เลือกลูกค้า</option>${state.customers.map(c=>opt(c.id,c.name,selected)).join('')}</select></label>${state.customers.length?'':'<small>เพิ่มลูกค้าจากเมนู “ลูกค้า” ก่อนบันทึกการขาย</small>'}</div>`;}
+function methodSelect(selected='cash'){return `<div class="field"><label>วิธีชำระเงิน<select name="method">${opt('cash','เงินสด',selected)}${opt('transfer','โอนเงิน',selected)}${opt('credit','ขายเชื่อ / ค้างชำระ',selected)}</select></label></div>`;}
 function productSelect(name='product_id'){return `<select name="${name}" required><option value="">เลือกสินค้า</option>${state.products.map(p=>opt(p.id,`${p.name} • เหลือ ${p.stock}`)).join('')}</select>`;}
 async function api(path,options={}){
  const method=options.method||'GET';const headers={'Accept':'application/json'};
@@ -30,8 +40,33 @@ async function api(path,options={}){
 async function getCsrf(){const r=await fetch('/auth/csrf',{credentials:'same-origin'});if(!r.ok)throw Error('ไม่สามารถขอ CSRF token');state.csrf=(await r.json()).csrf_token;}
 function showLogin(){delete root.dataset.operations;root.innerHTML=`<div class="login-page"><div class="card login"><div class="row"><div class="logo">TB</div><h1>Thanabunyapat One</h1></div><p>ระบบขายและจัดส่งออนไลน์ · หจก. ธนาบุณยภัทร</p><form id="login-form">${field('ชื่อผู้ใช้','username','text','', 'autocomplete="username" required maxlength="80"')}${field('รหัสผ่าน','password','password','','autocomplete="current-password" required')}<button class="btn block">เข้าสู่ระบบ</button></form><button class="btn secondary block" id="show-forgot" type="button">ลืมรหัสผ่าน</button><div class="small-note">เฉพาะเจ้าของระบบเท่านั้นที่สร้างบัญชีพนักงานได้ ระบบทดสอบนี้ไม่ใช่ระบบบัญชีคู่หรือใบกำกับภาษีตามกฎหมาย</div></div></div>`;}
 function showForgot(){root.innerHTML=`<div class="login-page"><div class="card login"><div class="row"><div class="logo">TB</div><h1>ลืมรหัสผ่าน</h1></div><p>เพื่อป้องกันคนอื่นยึดบัญชี พนักงานต้องขอให้เจ้าของระบบรีเซ็ตรหัสจากเมนู “ผู้ใช้งาน”</p><p class="small-note">แจ้งชื่อผู้ใช้แก่เจ้าของเท่านั้น ห้ามส่งรหัสผ่านเดิมหรือรหัสใหม่ผ่านแชต</p><button class="btn secondary block" id="show-login" type="button">กลับไปเข้าสู่ระบบ</button></div></div>`;}
-function navItems(){const role=state.user.role;const allowed={admin:Object.keys(labels),sales:['dashboard','pos','wholesale','sales','inventory','customers','prices'],warehouse:['dashboard','wholesale','inventory'],accountant:['dashboard','wholesale','sales','inventory','customers','expenses','reports']}[role]||['dashboard'];return Object.entries(labels).filter(([v])=>allowed.includes(v)).map(([v,t])=>`<button type="button" data-nav="${v}" class="${state.view===v?'active':''}">${esc(t)}</button>`).join('');}
-function shell(){root.innerHTML=`<div class="layout"><aside><div class="brand"><div class="logo">TB</div><div><strong>THANABUNYAPAT</strong><small>ONE · ออนไลน์</small></div></div><div class="nav" id="nav">${navItems()}</div><div class="foot">ข้อมูลกลางบนเซิร์ฟเวอร์<br>ใช้เฉพาะบัญชีพนักงานที่ได้รับอนุญาต</div></aside><main><header><div><div class="muted">SMART BUSINESS WORKSPACE</div><h1 id="title">${labels[state.view]}</h1></div><div class="row"><span class="pill">● SERVER MODE</span><button class="btn secondary slim" id="logout">ออกจากระบบ</button></div></header><div class="alert"><b>ระบบทดลองก่อนเปิดจริง</b> — ห้ามใช้ใบสรุปการขายแทนใบกำกับภาษี และต้องตรวจสอบการตั้งค่า HTTPS ฐานข้อมูล การสำรองข้อมูล และสิทธิ์พนักงานก่อนใช้งานจริง</div><div id="view"></div></main></div>`;}
+function navItems(){
+ const allowed=roleViews[state.user.role]||['dashboard'];
+ return navGroups.map(([label,views],index)=>{
+  const items=views.filter(view=>view==='operations'||allowed.includes(view));
+  if(!items.length)return '';
+  return `<div class="nav-group ${index===0?'nav-primary':'nav-more'}"><div class="nav-label">${label}</div>${items.map(view=>{
+   if(view==='operations')return '<button type="button" data-op="email">รายสัปดาห์ / ค่าแรง / หลักฐาน</button>';
+   const current=state.view===view;
+   return `<button type="button" data-nav="${view}" ${current?'class="active" aria-current="page"':''}>${labels[view]}</button>`;
+  }).join('')}</div>`;
+ }).join('');
+}
+function shell(){
+ root.innerHTML=`<div class="layout">
+ <aside class="sidebar">
+  <div class="brand"><span class="logo" aria-hidden="true">TB</span><div><strong>ธนาบุณยภัทร</strong><small>Mini ERP</small></div></div>
+  <nav class="nav" id="nav" aria-label="เมนูหลัก">${navItems()}</nav>
+  <button type="button" class="menu-toggle" id="toggle-nav" aria-controls="nav" aria-expanded="false">เมนูทั้งหมด</button>
+ </aside>
+ <main id="main-content">
+  <header class="page-header"><h1 id="title" tabindex="-1">${labels[state.view]}</h1>
+   <div class="row account"><span>${esc(roleLabels[state.user.role]||'พนักงาน')}</span><button class="btn secondary slim" id="logout">ออกจากระบบ</button></div>
+  </header>
+  <p class="staging-note">ระบบทดสอบ · เอกสารที่ออกเป็นร่างสำหรับตรวจสอบ</p>
+  <div id="view" aria-busy="true"><p class="loading" role="status">กำลังโหลดข้อมูล…</p></div>
+ </main></div>`;
+}
 async function refresh(){
  if(!state.user)return;
  try{
@@ -53,13 +88,35 @@ async function refresh(){
    if(needs==='settings'&&state.user.role==='admin')state.company=await api('/api/extended/company');
    if(needs==='pos'||needs==='inventory')state.imageIds=(await api('/api/extended/product-images')).ids;
    if(needs==='pos'&&state.posCustomer)await loadPosPrices(state.posCustomer);
-  render();
- }catch(err){warn(err.message);}
+  if(state.view===needs)render();
+ }catch(err){
+  const view=$('view');
+  if(view?.getAttribute('aria-busy')==='true'){
+   view.setAttribute('aria-busy','false');
+   view.innerHTML='<div class="card"><p>โหลดข้อมูลไม่สำเร็จ</p><button type="button" class="btn secondary" id="retry-view">ลองใหม่</button></div>';
+  }
+  warn(err.message);
+ }
 }
-function navigate(v){delete root.dataset.operations;state.view=v;shell();refresh();}
+function navigate(v){
+ if(!(roleViews[state.user?.role]||['dashboard']).includes(v))return;
+ delete root.dataset.operations;
+ state.view=v;
+ shell();
+ window.scrollTo(0,0);
+ $('title').focus({preventScroll:true});
+ refresh();
+}
 function card(label,val,sub){return `<div class="card metric"><small>${esc(label)}</small><strong>${esc(val)}</strong><small>${esc(sub)}</small></div>`;}
-function summary(){const s=state.summary||{};return `<div class="grid g4">${card('ยอดขายวันนี้',fmt(s.today_total),'รวม VAT ตามรายการขาย')}${card('ยอดขายสะสม',fmt(s.sales_total),'ยอดการขาย ไม่ใช่ยอดรับเงิน')}${card('ลูกหนี้คงเหลือ',fmt(s.receivable),'ยังไม่ได้รับชำระ')}${card('ยอดสินค้าคงเหลือ',String(s.stock_units??0),'จำนวนหน่วยทุกสินค้า')}</div>`;}
-function dashboard(){const s=state.summary||{};return `${summary()}<div class="grid g2"><div class="card"><h2>งานจัดส่งที่ยังไม่เสร็จ</h2><div class="row space"><strong>${esc(s.pending_delivery||0)} ออเดอร์</strong><button data-nav="wholesale" class="btn slim">จัดการจัดส่ง</button></div></div><div class="card"><h2>ค่าใช้จ่ายที่บันทึก</h2><strong>${fmt(s.expenses_total)}</strong><p>ไม่ใช่ตัวเลขกำไรสุทธิ เพราะยังไม่มีต้นทุนสินค้าขายและบัญชีคู่</p></div></div><div class="card"><h2>ยอดขายล่าสุด</h2>${tableSales(state.sales.slice(0,7),false)}</div>`;}
+function summary(){const s=state.summary||{};return `<div class="grid g4 metrics">${card('ยอดขายวันนี้',fmt(s.today_total),'รวม VAT ตามรายการขาย')}${card('ยอดขายสะสม',fmt(s.sales_total),'ยอดการขาย ไม่ใช่ยอดรับเงิน')}${card('ลูกหนี้คงเหลือ',fmt(s.receivable),'ยังไม่ได้รับชำระ')}${card('ยอดสินค้าคงเหลือ',String(s.stock_units??0),'จำนวนหน่วยทุกสินค้า')}</div>`;}
+function dashboard(){
+ const s=state.summary||{};
+ const allowed=roleViews[state.user.role]||[];
+ return `${summary()}<div class="dashboard-actions" aria-label="งานที่ใช้บ่อย">
+ ${allowed.includes('pos')?'<button type="button" data-nav="pos" class="btn">เริ่มขายหน้าร้าน</button>':''}
+ ${allowed.includes('wholesale')?'<button type="button" data-nav="wholesale" class="btn secondary">เปิดงานขายส่ง</button>':''}
+ ${allowed.includes('sales')?'<button type="button" data-nav="sales" class="btn secondary">เปิดบิลและลูกหนี้</button>':''}
+ </div><div class="grid g2"><div class="card"><h2>งานจัดส่งที่ยังไม่เสร็จ</h2><div class="row space"><strong>${esc(s.pending_delivery||0)} ออเดอร์</strong><button data-nav="wholesale" class="btn slim">จัดการจัดส่ง</button></div></div><div class="card"><h2>ค่าใช้จ่ายที่บันทึก</h2><strong>${fmt(s.expenses_total)}</strong><p>ไม่ใช่ตัวเลขกำไรสุทธิ เพราะยังไม่มีต้นทุนสินค้าขายและบัญชีคู่</p></div></div><div class="card"><h2>ยอดขายล่าสุด</h2>${tableSales(state.sales.slice(0,7),false)}</div>`;}
 function posUnitPrice(product){
  return state.posPrices.get(product.id) ?? product.price;
 }
@@ -83,6 +140,20 @@ async function loadPosPrices(customerId){
  state.posPriceReady=true;
  render();
 }
+function searchField(key,label,placeholder){
+ return `<div class="field list-search"><label for="search-${key}">${label}</label>
+ <input type="search" id="search-${key}" data-search="${key}" placeholder="${placeholder}" value="${esc(state.search[key]||'')}" autocomplete="off"></div>`;
+}
+function filterVisibleRows(key){
+ const query=(state.search[key]||'').trim().toLocaleLowerCase('th');
+ let visible=0;
+ for(const item of root.querySelectorAll(`[data-search-list="${key}"] [data-search-text]`)){
+  item.hidden=!item.dataset.searchText.toLocaleLowerCase('th').includes(query);
+  if(!item.hidden)visible++;
+ }
+ const empty=$(`no-match-${key}`);
+ if(empty)empty.hidden=!query||visible>0;
+}
 function pos(){
  const entries=[...state.cart].map(([id,quantity])=>({product:state.products.find(item=>item.id===id),quantity}))
   .filter(item=>item.product&&item.quantity>0);
@@ -91,19 +162,24 @@ function pos(){
   const photo=state.imageIds.includes(product.id)
    ? `<img class="product-photo" src="/api/extended/products/${product.id}/image" alt="">` : '';
   const marker=state.posPrices.has(product.id)?'<small>ราคาพิเศษลูกค้า</small>':'';
-  return `<button class="product" data-add="${product.id}" ${product.stock<=0?'disabled':''}>${photo}<b>${esc(product.name)}</b><small>${esc(product.sku)} · สต๊อก ${product.stock}</small><strong>${fmt(posUnitPrice(product))}</strong>${marker}</button>`;
+  return `<button type="button" class="product" data-search-text="${esc(product.name+' '+product.sku)}" data-add="${product.id}" ${product.stock<=0?'disabled':''}>${photo}<b>${esc(product.name)}</b><small>${esc(product.sku)} · สต๊อก ${product.stock}</small><strong>${fmt(posUnitPrice(product))}</strong>${marker}</button>`;
  }).join('');
  const lines=entries.map(({product,quantity})=>
   `<div class="line"><div><b>${esc(product.name)}</b><small> ${fmt(posUnitPrice(product))} × ${quantity}</small></div>
-  <div class="row"><button class="btn secondary slim" data-dec="${product.id}">−</button><b>${quantity}</b><button class="btn secondary slim" data-add="${product.id}">+</button></div></div>`
+  <div class="row"><button type="button" class="btn secondary slim qty-control" aria-label="ลดจำนวน ${esc(product.name)}" data-dec="${product.id}">−</button><b>${quantity}</b><button type="button" class="btn secondary slim qty-control" aria-label="เพิ่มจำนวน ${esc(product.name)}" data-add="${product.id}">+</button></div></div>`
  ).join('');
- return `<div class="grid g2"><div class="card"><h2>เลือกสินค้า</h2><div class="products">${products||'<div class="empty">ยังไม่มีสินค้า</div>'}</div></div>
- <div class="card"><h2>ตะกร้าขายหน้าร้าน</h2>${lines||'<div class="empty">ยังไม่มีสินค้าในตะกร้า</div>'}
+ return `<div class="grid pos-layout"><section class="card catalog" id="pos-catalog" tabindex="-1"><h2>เลือกสินค้า</h2>
+ ${searchField('products','ค้นหาสินค้า','พิมพ์ชื่อหรือรหัสสินค้า')}
+ <div class="products" data-search-list="products">${products||'<p class="empty">ยังไม่มีสินค้า เพิ่มสินค้าได้จากเมนูสต๊อก</p>'}</div>
+ ${products?'<p class="empty" id="no-match-products" role="status" hidden>ไม่พบสินค้า ลองใช้ชื่อหรือรหัสอื่น</p>':''}</section>
+ <section class="card cart" id="pos-cart" tabindex="-1"><h2>รายการขาย <span class="count">${entries.reduce((sum,item)=>sum+item.quantity,0)} หน่วย</span></h2>${lines||'<div class="empty">ยังไม่มีสินค้าในตะกร้า</div>'}
  <form id="pos-form">${customerSelect('customer_id',state.posCustomer)}${methodSelect(state.posMethod)}
  <div class="summary"><div><span>ยอดสินค้า</span><b>${fmt(subtotal/100)}</b></div><div><span>VAT ${state.vatRate}%</span><b>${fmt(vat/100)}</b></div>
  <div class="total"><span>ยอดรวม</span><b>${fmt(total/100)}</b></div></div>
  <button class="btn block" ${!entries.length||!state.posPriceReady?'disabled':''}>บันทึกการขายและตัดสต๊อก</button>
- <p class="small-note">เลือกลูกค้าเพื่อแสดงราคาพิเศษก่อนยืนยัน</p></form></div></div>`;
+ <p class="small-note">เลือกลูกค้าเพื่อตรวจราคาก่อนบันทึก</p></form>
+ <button type="button" class="btn secondary mobile-cart" data-pos-jump="pos-catalog">กลับไปเลือกสินค้า</button></section>
+ ${entries.length?`<div class="cart-shortcut"><button type="button" class="btn block" data-pos-jump="pos-cart"><span>ดูรายการขาย</span><strong>${fmt(total/100)}</strong></button></div>`:''}</div>`;
 }
 
 function whTotal(){const subtotal=state.wh.reduce((t,x)=>t+x.quantity*num(x.unit_price),0);return fmt(subtotal);}
@@ -112,21 +188,28 @@ const statusName={pending:'รอเตรียม',packing:'กำลังจ
 function orderTable(){if(!state.orders.length)return '<div class="empty">ยังไม่มีออเดอร์ขายส่ง</div>';return `<div class="tablewrap"><table><thead><tr><th>เลขบิล</th><th>ลูกค้า</th><th>วิธีรับ</th><th>ยอด</th><th>สถานะ</th><th></th></tr></thead><tbody>${state.orders.map(o=>{const done=['delivered','picked_up'].includes(o.status);return `<tr><td>#${o.id}</td><td>${esc(o.customer)}</td><td>${o.mode==='pickup'?'รับเอง':'จัดส่ง'}</td><td>${fmt(o.total)}</td><td><span class="status ${esc(o.status)}">${esc(statusName[o.status]||o.status)}</span></td><td><div class="row">${done?'':`<button class="btn slim" data-next="${o.id}">อัปเดตขั้นต่อไป</button>`}<button class="btn secondary slim" data-note="${o.id}">พิมพ์ใบส่งสินค้า</button></div></td></tr>`;}).join('')}</tbody></table></div>`;}
 function tableSales(items,allowPay=true){if(!items.length)return '<div class="empty">ยังไม่มีรายการขาย</div>';return `<div class="tablewrap"><table><thead><tr><th>เลข</th><th>วันที่</th><th>ลูกค้า</th><th class="num">รวม</th><th class="num">ค้างชำระ</th><th>ดำเนินการ</th></tr></thead><tbody>${items.map(s=>`<tr><td>#${s.id}</td><td>${formatDate(s.date)}</td><td>${esc(s.customer)}</td><td class="num">${fmt(s.total)}</td><td class="num">${fmt(s.balance)}<small class="muted"> ${num(s.balance)===0?'ชำระครบ':num(s.paid)>0?'ชำระบางส่วน':'ค้างชำระ'}</small></td><td><div class="row"><button class="btn secondary slim" data-print="${s.id}">พิมพ์สรุป</button><button class="btn secondary slim" data-history="${s.id}">ชำระ / เอกสาร</button><button class="btn secondary slim" data-op-sale="${s.id}">แนบสลิป</button>${allowPay&&num(s.balance)>0&&['admin','accountant'].includes(state.user.role)?`<button class="btn slim" data-pay="${s.id}">รับชำระ</button>`:''}</div></td></tr>`).join('')}</tbody></table></div>`;}
 function sales(){
- return `<div class="card"><h2>บิลขายและลูกหนี้</h2><div class="row"><button type="button" class="btn secondary" data-sales-filter="all">บิลทั้งหมด</button>
- <button type="button" class="btn secondary" data-sales-filter="open">เฉพาะค้างชำระ</button></div>
+ return `<div class="card"><h2>บิลขายและลูกหนี้</h2><div class="row"><button type="button" class="btn secondary" data-sales-filter="all" aria-pressed="${!state.salesOutstanding}">บิลทั้งหมด</button>
+ <button type="button" class="btn secondary" data-sales-filter="open" aria-pressed="${state.salesOutstanding}">เฉพาะค้างชำระ</button></div>
  <p>${state.salesOutstanding?'กำลังดูเฉพาะบิลที่ยังมียอดค้าง':'กำลังดูบิลทั้งหมด'} · รับชำระบางส่วนหรือเต็มยอด</p>
  ${tableSales(state.sales)}${state.salesCursor?'<button type="button" class="btn secondary" data-sales-more>โหลดบิลเก่ากว่า</button>':''}</div>`;
 }
 function inventory(){const canWrite=['admin','warehouse'].includes(state.user.role);return `<div class="grid g2">${canWrite?`<div class="card"><h2>เพิ่มสินค้า</h2><form id="product-form">${field('รหัสสินค้า SKU','sku','text','','required maxlength="80"')}${field('ชื่อสินค้า','name','text','','required maxlength="200"')}${field('ราคาขายก่อน VAT (บาท)','price','number','','required min="0" step="0.01"')}<button class="btn">บันทึกสินค้า</button></form></div><div class="card"><h2>รับเข้า / ปรับสต๊อก</h2><form id="stock-form"><div class="field"><label>สินค้า</label>${productSelect()}</div>${field('จำนวนเพิ่ม (+) หรือลด (−)','delta','number','1','step="1" required')}${field('เหตุผลปรับสต๊อก','reason','text','','required maxlength="200"')}<button class="btn">บันทึกสต๊อก</button></form></div>`:''}</div><div class="card"><h2>สินค้าคงเหลือ</h2><div class="tablewrap"><table><thead><tr><th>SKU</th><th>สินค้า</th><th class="num">ราคา</th><th class="num">คงเหลือ</th></tr></thead><tbody>${state.products.map(p=>`<tr><td>${esc(p.sku)}</td><td>${esc(p.name)}</td><td class="num">${fmt(p.price)}</td><td class="num">${p.stock}</td></tr>`).join('')}</tbody></table></div></div>`;}
-function customers(){return `<div class="grid g2"><div class="card"><h2>เพิ่มลูกค้า</h2><form id="customer-form">${field('ชื่อร้านค้า / ลูกค้า','name','text','','required maxlength="200"')}${field('ที่อยู่','address','text','','required maxlength="1000"')}${field('เลขผู้เสียภาษี 13 หลัก (ถ้ามี)','tax_id','text','','pattern="[0-9]{13}" maxlength="13"')}<button class="btn">บันทึกลูกค้า</button></form></div><div class="card"><h2>ลูกค้าทั้งหมด</h2><div class="tablewrap"><table><tbody>${state.customers.map(c=>`<tr><td><b>${esc(c.name)}</b><div class="muted">${esc(c.address)}</div></td></tr>`).join('')}</tbody></table></div></div></div>`;}
+function customers(){
+ const rows=state.customers.map(c=>`<tr data-search-text="${esc(c.name+' '+c.address)}"><td><b>${esc(c.name)}</b><div class="muted">${esc(c.address)}</div></td></tr>`).join('');
+ return `<div class="grid g2 directory-layout">
+ <section class="card"><h2>รายชื่อลูกค้า</h2>${searchField('customers','ค้นหาลูกค้า','พิมพ์ชื่อร้านหรือที่อยู่')}
+ <div class="tablewrap"><table aria-label="รายชื่อลูกค้า"><tbody data-search-list="customers">${rows}</tbody></table></div>
+ ${rows?'<p class="empty" id="no-match-customers" role="status" hidden>ไม่พบลูกค้า ลองใช้ชื่อหรือที่อยู่อื่น</p>':'<p class="empty">ยังไม่มีลูกค้า</p>'}</section>
+ <section class="card"><h2>เพิ่มลูกค้า</h2><form id="customer-form">${field('ชื่อร้านค้า / ลูกค้า','name','text','','required maxlength="200"')}${field('ที่อยู่','address','text','','required maxlength="1000"')}${field('เลขผู้เสียภาษี 13 หลัก (ถ้ามี)','tax_id','text','','pattern="[0-9]{13}" maxlength="13"')}<button class="btn">บันทึกลูกค้า</button></form></section></div>`;
+}
 function expenses(){return `<div class="grid g2"><div class="card"><h2>บันทึกค่าใช้จ่าย</h2><p>ใช้ติดตามรายจ่าย ไม่ใช่ลงบัญชีคู่</p><form id="expense-form">${field('หมวดหมู่','category','text','ขนส่ง','required maxlength="80"')}${field('รายละเอียด','description','text','','required maxlength="250"')}${field('จำนวนเงิน (บาท)','amount','number','','min="0.01" step="0.01" required')}<div class="field"><label>ชำระโดย</label><select name="method">${opt('cash','เงินสด')}${opt('transfer','โอนเงิน')}</select></div><button class="btn">บันทึกรายจ่าย</button></form></div><div class="card"><h2>รายจ่ายล่าสุด</h2><div class="tablewrap"><table><tbody>${state.expenses.map(x=>`<tr><td>#${x.id} ${esc(x.category)}<div class="muted">${esc(x.description)}</div><button class="btn secondary slim" data-op-expense="${x.id}">แนบรูปใบเสร็จ</button></td><td class="num">${fmt(x.amount)}</td></tr>`).join('')}</tbody></table></div></div></div>`;}
 function reports(){const s=state.summary||{};return `${summary()}<div class="card"><h2>รายงานการจัดส่งและค่าใช้จ่าย</h2><div class="grid g2">${card('รอส่งสินค้า',String(s.pending_delivery||0),'สถานะยังไม่สิ้นสุด')}${card('รายจ่ายที่บันทึก',fmt(s.expenses_total),'ไม่รวมต้นทุนสินค้าขาย')}</div><div class="alert">ยังไม่มีระบบต้นทุนสินค้า กำไรขาดทุนบัญชีคู่ งบการเงิน และรายงานภาษีที่ผ่านการรับรอง ห้ามนำยอดรวมนี้ไปอ้างว่าเป็นกำไรสุทธิ</div></div>`;}
 function users(){
  if(state.user.role!=='admin')return '<div class="alert">ไม่มีสิทธิ์เข้าถึง</div>';
- const rows=state.users.map(u=>`<tr><td>${esc(u.username)}</td><td>${esc(u.role)}</td><td>${u.active?'เปิดใช้':'ปิดใช้'}</td><td>${u.role==='admin'?'เจ้าของระบบ':`<button class="btn secondary slim" data-staff="${u.id}">แก้สิทธิ์</button>`} <button class="btn secondary slim" data-reset="${u.id}">ตั้งรหัสใหม่</button></td></tr>`).join('');
- return `<div class="grid g2"><div class="card"><h2>สร้างบัญชีพนักงาน (เจ้าของเท่านั้น)</h2><form id="create-user-form">${field('ชื่อผู้ใช้','username','text','','required maxlength="80"')}${field('รหัสผ่านแรกเริ่ม','password','password','','required minlength="12" maxlength="128"')}<div class="field"><label>หน้าที่</label><select name="role">${['sales','warehouse','accountant'].map(r=>opt(r,r)).join('')}</select></div><button class="btn">สร้างบัญชี</button></form></div><div class="card"><h2>บัญชีผู้ใช้งาน</h2><div class="tablewrap"><table><tbody>${rows}</tbody></table></div></div></div>`;
+ const rows=state.users.map(u=>`<tr><td>${esc(u.username)}</td><td>${esc(roleLabels[u.role]||u.role)}</td><td>${u.active?'เปิดใช้':'ปิดใช้'}</td><td>${u.role==='admin'?'เจ้าของระบบ':`<button class="btn secondary slim" data-staff="${u.id}">แก้สิทธิ์</button>`} <button class="btn secondary slim" data-reset="${u.id}">ตั้งรหัสใหม่</button></td></tr>`).join('');
+ return `<div class="grid g2"><div class="card"><h2>สร้างบัญชีพนักงาน (เจ้าของเท่านั้น)</h2><form id="create-user-form">${field('ชื่อผู้ใช้','username','text','','required maxlength="80"')}${field('รหัสผ่านแรกเริ่ม','password','password','','required minlength="12" maxlength="128"')}<div class="field"><label>หน้าที่</label><select name="role">${['sales','warehouse','accountant'].map(r=>opt(r,roleLabels[r])).join('')}</select></div><button class="btn">สร้างบัญชี</button></form></div><div class="card"><h2>บัญชีผู้ใช้งาน</h2><div class="tablewrap"><table><tbody>${rows}</tbody></table></div></div></div>`;
 }
-function showStaff(id){const u=state.users.find(x=>x.id===Number(id));if(!u||u.role==='admin')return;$('view').insertAdjacentHTML('afterbegin',`<div class="card"><h2>แก้สิทธิ์: ${esc(u.username)}</h2><form id="staff-form"><input name="id" type="hidden" value="${u.id}"><div class="field"><label>บทบาท</label><select name="role">${['sales','warehouse','accountant'].map(r=>opt(r,r,u.role)).join('')}</select></div><div class="field"><label>สถานะ</label><select name="active">${opt('true','เปิดใช้',String(u.active))}${opt('false','ปิดใช้',String(u.active))}</select></div><button class="btn">บันทึกสิทธิ์</button></form></div>`);}
+function showStaff(id){const u=state.users.find(x=>x.id===Number(id));if(!u||u.role==='admin')return;$('view').insertAdjacentHTML('afterbegin',`<div class="card"><h2>แก้สิทธิ์: ${esc(u.username)}</h2><form id="staff-form"><input name="id" type="hidden" value="${u.id}"><div class="field"><label>บทบาท</label><select name="role">${['sales','warehouse','accountant'].map(r=>opt(r,roleLabels[r],u.role)).join('')}</select></div><div class="field"><label>สถานะ</label><select name="active">${opt('true','เปิดใช้',String(u.active))}${opt('false','ปิดใช้',String(u.active))}</select></div><button class="btn">บันทึกสิทธิ์</button></form></div>`);}
 function prices(){
  if(!['admin','sales'].includes(state.user.role))return '<div class="alert">ไม่มีสิทธิ์</div>';
  return `<div class="card"><h2>ราคาพิเศษรายลูกค้า</h2><p>ราคาที่บันทึกจะนำไปใช้กับ POS และออเดอร์ที่ไม่ได้ระบุราคาต่อรองด้วยตนเอง</p><form id="price-form">${customerSelect()}<div class="field"><label>สินค้า</label>${productSelect()}</div>${field('ราคาพิเศษก่อน VAT','price','number','','min="0.01" step="0.01" required')}<button class="btn">บันทึกราคาพิเศษ</button></form><h3>ดูราคาที่บันทึก</h3><div class="field"><select id="price-customer"><option value="">เลือกลูกค้า</option>${state.customers.map(c=>opt(c.id,c.name,state.selectedCustomer)).join('')}</select></div><button class="btn secondary slim" data-load-prices="1">แสดงรายการ</button><div class="tablewrap"><table><tbody>${state.specialPrices.map(x=>`<tr><td>${esc(state.products.find(p=>p.id===x.product_id)?.name||x.product_id)}</td><td>${fmt(x.price)}</td><td><button class="btn secondary slim" data-remove-price="${x.product_id}">ลบ</button></td></tr>`).join('')}</tbody></table></div></div>`;
@@ -135,9 +218,33 @@ function settings(){const c=state.company||{};return `<div class="card"><h2>ข�
 function inventoryWithExtras(){const writable=['admin','warehouse'].includes(state.user.role);return inventory()+`${writable?`<div class="card"><h2>เพิ่มรูปสินค้า</h2><form id="image-form"><div class="field"><label>สินค้า</label>${productSelect()}</div><input name="image" type="file" accept="image/jpeg,image/png,image/webp" required><button class="btn">อัปโหลดรูป (ไม่เกิน 1 MB)</button></form></div>`:''}<div class="card"><h2>ภาพสินค้า</h2><div class="products">${state.products.filter(p=>state.imageIds.includes(p.id)).map(p=>`<div class="product"><img class="product-photo" src="/api/extended/products/${p.id}/image" alt="${esc(p.name)}"><div>${esc(p.name)}</div></div>`).join('')||'ยังไม่มีภาพสินค้า'}</div></div>`;}
 async function showHistory(id){document.getElementById('sale-history')?.remove();const [history,docs]=await Promise.all([api(`/api/extended/sales/${Number(id)}/payments`),api(`/api/extended/sales/${Number(id)}/documents`)]);const canIssue=['admin','accountant'].includes(state.user.role);$('view').insertAdjacentHTML('afterbegin',`<div class="card" id="sale-history"><h2>ประวัติชำระบิล #${id}</h2><p>ค้าง ${fmt(history.balance)} จากยอดรวม ${fmt(history.total)}</p><div class="tablewrap"><table><tbody>${history.payments.map(p=>`<tr><td>${formatDate(p.date)}<br>${esc(p.reference)}</td><td>${esc(p.method)}</td><td>${fmt(p.amount)}</td><td>${canIssue?`<button class="btn secondary slim" data-issue-doc="receipt" data-sale-id="${id}" data-payment-id="${p.id}">ออกใบเสร็จร่าง</button>`:''}</td></tr>`).join('')}</tbody></table></div>${canIssue?`<button class="btn slim" data-issue-doc="tax_invoice" data-sale-id="${id}">ออกใบกำกับภาษีร่าง</button>`:''}<h3>เอกสารที่บันทึกไว้ (แก้ย้อนหลังไม่ได้)</h3>${docs.items.map(d=>`<p>${esc(d.number)} (${esc(d.kind)}) · <a target="_blank" rel="noopener" href="/api/extended/documents/${d.id}/print?paper=a4">A4</a> · <a target="_blank" rel="noopener" href="/api/extended/documents/${d.id}/print?paper=58">58 มม.</a></p>`).join('')||'ยังไม่มีเอกสาร'}</div>`);window.scrollTo({top:0,behavior:'smooth'});}
 
-function render(){if(!state.user||root.dataset.operations)return;const view=$('view');if(!view)return;const map={dashboard,pos,wholesale,sales,inventory:inventoryWithExtras,customers,expenses,reports,users,prices,settings};view.innerHTML=(map[state.view]||dashboard)();const t=$('title');if(t)t.textContent=labels[state.view];const nav=$('nav');if(nav)nav.innerHTML=navItems();}
+function render(){
+ if(!state.user||root.dataset.operations)return;
+ const view=$('view');
+ if(!view)return;
+ const wholesaleDraft=$('wh-form');
+ const draft=wholesaleDraft?f(wholesaleDraft):null;
+ const focused=document.activeElement;
+ const cartAction=focused?.matches('.qty-control,.product[data-add]')?
+  {attr:focused.hasAttribute('data-dec')?'data-dec':'data-add',id:focused.dataset.dec||focused.dataset.add,qty:focused.classList.contains('qty-control')}:null;
+ const map={dashboard,pos,wholesale,sales,inventory:inventoryWithExtras,customers,expenses,reports,users,prices,settings};
+ view.innerHTML=(map[state.view]||dashboard)();
+ view.setAttribute('aria-busy','false');
+ if(draft&&$('wh-form'))for(const [name,value] of Object.entries(draft)){
+  const control=$('wh-form').elements.namedItem(name);
+  if(control)control.value=value;
+ }
+ if(state.view==='pos'){
+  filterVisibleRows('products');
+  if(cartAction){
+   const action=view.querySelector(`${cartAction.qty?'.qty-control':'.product'}[${cartAction.attr}="${cartAction.id}"]`);
+   (action||view.querySelector(`.product[data-add="${cartAction.id}"]`))?.focus({preventScroll:true});
+  }
+ }
+ if(state.view==='customers')filterVisibleRows('customers');
+}
 function showReset(id){const user=state.users.find(x=>x.id===Number(id));if(!user)return;const el=$('view');el.insertAdjacentHTML('afterbegin',`<div class="card"><h2>ตั้งรหัสใหม่: ${esc(user.username)}</h2><form id="reset-password-form"><input type="hidden" name="user_id" value="${user.id}">${field('รหัสผ่านใหม่','password','password','','autocomplete="new-password" required minlength="12" maxlength="128"')}${field('ยืนยันรหัสผ่านใหม่','confirm_password','password','','autocomplete="new-password" required minlength="12" maxlength="128"')}<button class="btn">บันทึกรหัสใหม่</button></form><div class="small-note">ให้ส่งรหัสใหม่แก่พนักงานผ่านช่องทางส่วนตัวเท่านั้น</div></div>`);window.scrollTo({top:0,behavior:'smooth'});}
-async function doLogin(form){const values=f(form);await getCsrf();const r=await api('/auth/login',{method:'POST',body:{username:values.username,password:values.password}});state.csrf=r.csrf_token;state.user=await api('/auth/me');shell();await refresh();}
+async function doLogin(form){const values=f(form);await getCsrf();const r=await api('/auth/login',{method:'POST',body:{username:values.username,password:values.password}});state.csrf=r.csrf_token;state.user=await api('/auth/me');state.view='dashboard';shell();await refresh();}
 async function confirmSale(kind,form){
  const v=f(form);
  if(kind==='pos'&&(!state.posPriceReady||Number(v.customer_id)!==state.posCustomer))throw Error('กรุณาเลือกลูกค้าและรอตรวจราคา');
@@ -191,6 +298,12 @@ async function printDelivery(id){
  $('print-root').innerHTML=`<h2>หจก. ธนาบุณยภัทร</h2><p><b>ใบส่งสินค้า (ตัวอย่าง)</b><br>ไม่ใช่ใบกำกับภาษี<br>เลขที่บิล #${o.id}<br>วันที่จัดส่ง ${esc(o.delivery_date||'—')}<br>ลูกค้า ${esc(o.customer)}<br>สถานที่ ${esc(o.address)}<br>ผู้ติดต่อ ${esc(o.phone)}<br>คนขับ ${esc(o.driver)}</p><table><thead><tr><th>สินค้า</th><th>จำนวน</th></tr></thead><tbody>${rows}</tbody></table><p>รับสินค้าครบถ้วน: __________________<br>วันที่รับ: __________________</p>`;
  window.print();
 }
+document.addEventListener('input',event=>{
+ const key=event.target.dataset.search;
+ if(!key)return;
+ state.search[key]=event.target.value;
+ filterVisibleRows(key);
+});
 document.addEventListener('change',async event=>{
  if(event.target.form?.id!=='pos-form')return;
  if(event.target.name==='method'){state.posMethod=event.target.value;return;}
@@ -202,6 +315,15 @@ document.addEventListener('submit',event=>{if(!event.target.matches('form'))retu
 document.addEventListener('click',async event=>{
  const btn=event.target.closest('button');if(!btn)return;
  try{
+ if(btn.id==='toggle-nav'){
+  const open=btn.getAttribute('aria-expanded')==='true';
+  btn.setAttribute('aria-expanded',String(!open));
+  btn.textContent=open?'เมนูทั้งหมด':'ย่อเมนู';
+  $('nav').classList.toggle('expanded',!open);
+  return;
+ }
+ if(btn.id==='retry-view'){navigate(state.view);return;}
+ if(btn.dataset.posJump){const section=$(btn.dataset.posJump);section?.focus({preventScroll:true});section?.scrollIntoView({block:'start'});return;}
  if(btn.dataset.nav){navigate(btn.dataset.nav);return;}
  if(btn.dataset.salesFilter){state.salesOutstanding=btn.dataset.salesFilter==='open';await refresh();return;}
  if(btn.hasAttribute('data-sales-more')&&state.salesCursor){
@@ -210,7 +332,7 @@ document.addEventListener('click',async event=>{
  }
  if(btn.id==='show-forgot'){showForgot();return;}
  if(btn.id==='show-login'){showLogin();return;}
- if(btn.id==='logout'){await api('/auth/logout',{method:'POST',body:{}});state.user=null;state.csrf=null;showLogin();return;}
+ if(btn.id==='logout'){await api('/auth/logout',{method:'POST',body:{}});state.user=null;state.csrf=null;state.search={};state.cart.clear();state.wh=[];state.posCustomer=0;state.posPrices.clear();state.posPriceReady=false;state.posMethod='cash';showLogin();return;}
  if(btn.dataset.add){const id=Number(btn.dataset.add);const p=state.products.find(p=>p.id===id);if(!p)return;const qty=state.cart.get(id)||0;if(qty>=p.stock)throw Error('สินค้าไม่พอ');state.cart.set(id,qty+1);render();return;}
  if(btn.dataset.dec){const id=Number(btn.dataset.dec),qty=(state.cart.get(id)||0)-1;if(qty<=0)state.cart.delete(id);else state.cart.set(id,qty);render();return;}
  if(btn.dataset.whdel!==undefined){state.wh.splice(Number(btn.dataset.whdel),1);render();return;}
