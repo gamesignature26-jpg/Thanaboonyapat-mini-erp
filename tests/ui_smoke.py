@@ -118,6 +118,11 @@ def main():
             page.get_by_role("button", name="บันทึกการขายและตัดสต๊อก", exact=True).click()
             page.get_by_role("button", name="พิมพ์สรุปบิล #1", exact=True).wait_for()
             page.get_by_role("button", name="บิลขาย / ลูกหนี้", exact=True).click()
+            with page.expect_popup() as billing:
+                page.get_by_role("link", name="ใบวางบิลตัวอย่าง", exact=True).click()
+            billing.value.get_by_text("ใบวางบิลตัวอย่าง", exact=False).first.wait_for()
+            billing.value.get_by_text("ไม่ใช่ใบกำกับภาษี", exact=False).first.wait_for()
+            billing.value.close()
             page.get_by_role("button", name="รับชำระ", exact=True).click()
             page.get_by_role("button", name="บันทึกรับชำระ", exact=True).click()
             page.get_by_role("button", name="ออกใบเสร็จร่าง", exact=True).click()
