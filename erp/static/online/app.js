@@ -234,7 +234,13 @@ function quotations(){
  }).join('');
  const quotes=state.quotations.map(q=>`<tr><td>${esc(q.number)}</td><td>${esc(q.customer_name)}</td><td>${formatDate(q.date)}</td><td class="num">${fmt(q.total)}</td><td><button type="button" class="btn secondary slim" data-quote-detail="${q.id}">ดูรายละเอียด</button> <a class="btn secondary slim" target="_blank" rel="noopener" href="/api/quotations/${q.id}/print">พิมพ์ร่าง</a></td></tr>`).join('');
  const selected=state.quoteSelected;
- const detail=selected?`<section class="card"><h2>รายละเอียด ${esc(selected.number)}</h2><p>ลูกค้า ${esc(selected.customer.name)} · ยอดรวม ${fmt(selected.total)} · VAT ${fmt(selected.vat)}</p><p>เอกสารร่าง ไม่ใช่ใบเสร็จหรือใบกำกับภาษี</p><div class="tablewrap"><table><tbody>${selected.lines.map(x=>`<tr><td>${esc(x.name)}</td><td>${x.quantity} × ${fmt(x.unit_price)}</td></tr>`).join('')}</tbody></table></div></section>`:'';
+ const quoteActions=canCreate&&!selected?.sale_id?(selected?.status==='draft'?[['sent','บันทึกว่าส่งแล้ว']]:selected?.status==='sent'?[['accepted','ลูกค้ายืนยัน'],['declined','ลูกค้าปฏิเสธ']]:[]):[];
+ const detailsStatus={draft:'ร่าง',sent:'ส่งให้ลูกค้าแล้ว',accepted:'บันทึกลูกค้ายืนยันแล้ว',declined:'ลูกค้าปฏิเสธ'};
+ const detail=selected?`<section class="card" id="quote-detail"><h2>รายละเอียด ${esc(selected.number)}</h2><p>ลูกค้า ${esc(selected.customer.name)} · ยอดรวม ${fmt(selected.total)} · VAT ${fmt(selected.vat)}</p><p>สถานะ: ${esc(detailsStatus[selected.status]||selected.status)}</p><p>เอกสารร่าง ไม่ใช่ใบเสร็จหรือใบกำกับภาษี</p><div class="tablewrap"><table><tbody>${selected.lines.map(x=>`<tr><td>${esc(x.name)}</td><td>${x.quantity} × ${fmt(x.unit_price)}</td></tr>`).join('')}</tbody></table></div>
+ ${quoteActions.length?`<div class="field"><label for="quote-status-note">หมายเหตุหรือหลักฐานการติดต่อกับลูกค้า</label><input id="quote-status-note" maxlength="600" placeholder="เช่น ลูกค้ายืนยันทางโทรศัพท์" required></div><div class="row">${quoteActions.map(([status,label])=>`<button type="button" class="btn secondary slim" data-quote-transition="${status}" data-quote-id="${selected.id}">${label}</button>`).join('')}</div>`:''}
+ ${selected.sale_id?`<p>แปลงเป็นบิลขาย #${selected.sale_id} แล้ว</p>`:''}
+ ${canCreate&&selected.status==='accepted'&&!selected.sale_id?`<form id="quote-convert-form"><h3>แปลงใบเสนอราคาเป็นบิลขายเชื่อ</h3><p class="small-note">ตรวจราคาปัจจุบันและสต็อกอีกครั้ง หากเปลี่ยนจะไม่สร้างบิล</p><div class="field"><label>รูปแบบรับสินค้า<select name="delivery_mode">${opt('pickup','รับสินค้าเอง')}${opt('delivery','ส่งสินค้า')}</select></label></div>${field('ที่อยู่จัดส่ง','address','text',selected.customer.address||'','maxlength="1000"')}${field('โทรศัพท์','phone','tel','','maxlength="30"')}${field('คนขับ','driver','text','','maxlength="100"')}${field('วันจัดส่ง','delivery_date','date')}${field('หมายเหตุ','note','text','','maxlength="600"')}<button class="btn">ยืนยันแปลงเป็นบิลขาย</button></form>`:''}
+ <h3>ประวัติการเปลี่ยนสถานะ</h3><div class="tablewrap"><table><tbody>${(selected.events||[]).map(e=>`<tr><td>${formatDate(e.created_at)}</td><td>${esc(detailsStatus[e.to_status]||e.to_status)}</td><td>${esc(e.note)}</td></tr>`).join('')||'<tr><td>ยังไม่มีการเปลี่ยนสถานะ</td></tr>'}</tbody></table></div></section>`:'';
  return `${canCreate?`<div class="grid g2"><section class="card"><h2>เพิ่มรายการเสนอราคา</h2><form id="quote-add-form"><div class="field"><label>สินค้า${productSelect()}</label></div>${field('จำนวนสินค้า','quantity','number','1','min="1" step="1" max="1000000" required')}<button class="btn secondary block">เพิ่มรายการเสนอราคา</button></form><div class="tablewrap"><table><thead><tr><th>สินค้า</th><th>จำนวน</th><th>จัดการ</th></tr></thead><tbody>${lines||'<tr><td colspan="3">ยังไม่มีรายการ</td></tr>'}</tbody></table></div></section><section class="card"><h2>สร้างใบเสนอราคา (ร่าง)</h2><p>ไม่ตัดสต็อก และราคาจะคำนวณจากเซิร์ฟเวอร์เมื่อบันทึก</p><form id="quote-form">${customerSelect()}${vatModeSelect()}${field('วันหมดอายุ','expires_on','date')}${field('หมายเหตุ','note','text','','maxlength="600"')}<button class="btn block" ${!state.quoteLines.length?'disabled':''}>บันทึกใบเสนอราคาร่าง</button></form></section></div>`:''}<section class="card"><h2>ใบเสนอราคาที่บันทึก</h2><div class="tablewrap"><table><thead><tr><th>เลขอ้างอิง</th><th>ลูกค้า</th><th>วันที่</th><th>ยอดรวม</th><th>ดำเนินการ</th></tr></thead><tbody>${quotes||'<tr><td colspan="5">ยังไม่มีใบเสนอราคา</td></tr>'}</tbody></table></div><p class="small-note">เลข QT-DRAFT เป็นเลขอ้างอิงภายใน ไม่ใช่เลขที่เอกสารภาษี</p></section>${detail}`;
 }
 function inventory(){const canWrite=['admin','warehouse'].includes(state.user.role);return `<div class="grid g2">${canWrite?`<div class="card"><h2>เพิ่มสินค้า</h2><form id="product-form">${field('รหัสสินค้า SKU','sku','text','','required maxlength="80"')}${field('ชื่อสินค้า','name','text','','required maxlength="200"')}${field('ราคาขายก่อน VAT (บาท)','price','number','','required min="0" step="0.01"')}<button class="btn">บันทึกสินค้า</button></form></div><div class="card"><h2>รับเข้า / ปรับสต๊อก</h2><form id="stock-form"><div class="field"><label>สินค้า</label>${productSelect()}</div>${field('จำนวนเพิ่ม (+) หรือลด (−)','delta','number','1','step="1" required')}${field('เหตุผลปรับสต๊อก','reason','text','','required maxlength="200"')}<button class="btn">บันทึกสต๊อก</button></form></div>`:''}</div><div class="card"><h2>สินค้าคงเหลือ</h2><div class="tablewrap"><table><thead><tr><th>SKU</th><th>สินค้า</th><th class="num">ราคา</th><th class="num">คงเหลือ</th></tr></thead><tbody>${state.products.map(p=>`<tr><td>${esc(p.sku)}</td><td>${esc(p.name)}</td><td class="num">${fmt(p.price)}</td><td class="num">${p.stock}</td></tr>`).join('')}</tbody></table></div></div>`;}
@@ -379,6 +385,13 @@ async function send(form){if(state.busy)return;state.busy=true;const submit=form
   if(state.quoteLines.length>=100||state.quoteLines.some(x=>x.product_id===p.id))throw Error('รายการซ้ำหรือเกิน 100 รายการ');
   state.quoteLines.push({product_id:p.id,quantity:qty});render();
  }
+ else if(id==='quote-convert-form'){
+  if(!state.quoteSelected)throw Error('ไม่พบใบเสนอราคา');
+  const body={delivery_mode:v.delivery_mode,address:v.address,phone:v.phone,driver:v.driver,delivery_date:v.delivery_date||null,note:v.note||''};
+  const result=await api(`/api/quotations/${state.quoteSelected.id}/convert`,{method:'POST',body});
+  state.quoteSelected=await api(`/api/quotations/${state.quoteSelected.id}`);
+  warn(`แปลงเป็นบิลขาย #${result.sale_id} สำเร็จ`);await refresh();
+ }
  else if(id==='quote-form'){
   if(!state.quoteLines.length)throw Error('กรุณาเพิ่มรายการเสนอราคา');
   const payload={customer_id:Number(v.customer_id),vat_price_mode:v.vat_price_mode,expires_on:v.expires_on||null,note:v.note||'',lines:state.quoteLines.map(x=>({...x}))};
@@ -442,6 +455,12 @@ document.addEventListener('click',async event=>{
   if(btn.dataset.customerClear){state.customerLookupResults=null;state.customerHistory=null;state.search.customers='';render();return;}
   if(btn.dataset.customerHistory){state.customerHistory=await api(`/api/customers/${Number(btn.dataset.customerHistory)}/history`);render();$('customer-purchase-history')?.focus({preventScroll:true});return;}
  if(btn.hasAttribute('data-quote-remove')){state.quoteLines.splice(Number(btn.dataset.quoteRemove),1);render();return;}
+ if(btn.dataset.quoteTransition){
+  const note=$('quote-status-note')?.value.trim();
+  if(!note)throw Error('กรุณาบันทึกหมายเหตุการติดต่อลูกค้า');
+  const updated=await api(`/api/quotations/${Number(btn.dataset.quoteId)}/status`,{method:'POST',body:{status:btn.dataset.quoteTransition,note}});
+  state.quoteSelected=updated;warn('อัปเดตสถานะใบเสนอราคาแล้ว');await refresh();return;
+ }
  if(btn.dataset.quoteDetail){state.quoteSelected=await api(`/api/quotations/${Number(btn.dataset.quoteDetail)}`);render();return;}
  if(btn.dataset.salesFilter){state.salesOutstanding=btn.dataset.salesFilter==='open';await refresh();return;}
  if(btn.hasAttribute('data-sales-more')&&state.salesCursor){
