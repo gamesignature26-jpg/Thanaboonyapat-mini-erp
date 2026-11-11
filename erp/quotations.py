@@ -69,7 +69,9 @@ def positive_param(name, default, maximum):
 
 
 def quote_lines(qid):
-    return list(db.session.scalars(db.select(QuotationLine).where(QuotationLine.quotation_id == qid).order_by(QuotationLine.id)))
+    return list(
+        db.session.scalars(db.select(QuotationLine).where(QuotationLine.quotation_id == qid).order_by(QuotationLine.id))
+    )
 
 
 def summary(quote):
@@ -175,9 +177,7 @@ def create_quotation():
             )
         )
     }
-    subtotal_entered = sum(
-        (Decimal(special.get(p.id, p.price)) * requested[p.id] for p in products), Decimal(0)
-    )
+    subtotal_entered = sum((Decimal(special.get(p.id, p.price)) * requested[p.id] for p in products), Decimal(0))
     rate = Decimal(str(current_app.config["VAT_RATE"]))
     if mode == "inclusive":
         total = subtotal_entered
