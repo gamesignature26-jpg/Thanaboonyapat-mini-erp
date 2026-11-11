@@ -505,4 +505,8 @@ def create_app(config=None):
 
     app.register_blueprint(quotation_bp)
 
+    from .billing_previews import bp as billing_previews_bp
+
+    app.register_blueprint(billing_previews_bp)
+
     return app
