@@ -3,17 +3,17 @@
 'use strict';
 const root = document.getElementById('root');
 const toast = document.getElementById('toast');
-const state = {user:null,csrf:null,view:'dashboard',products:[],customers:[],sales:[],orders:[],expenses:[],users:[],summary:null,cart:new Map(),wh:[],vatRate:7,busy:false,company:{},specialPrices:[],selectedCustomer:0,imageIds:[],posCustomer:0,posPrices:new Map(),posPriceReady:false,posMethod:"cash",customerLookupResults:null,customerHistory:null,salesOutstanding:false,salesCursor:null,search:{},posVatMode:'exclusive',lastSale:null};
-const labels = {dashboard:'ภาพรวมธุรกิจ',pos:'ขายหน้าร้าน POS',wholesale:'ขายส่ง / จัดส่ง',sales:'บิลขาย / ลูกหนี้',inventory:'สินค้าและสต๊อก',customers:'ลูกค้า',expenses:'ค่าใช้จ่าย',reports:'รายงาน',users:'ผู้ใช้งาน',prices:'ราคาพิเศษ',settings:'ตั้งค่าบริษัท'};
+const state = {user:null,csrf:null,view:'dashboard',products:[],customers:[],sales:[],orders:[],expenses:[],users:[],summary:null,cart:new Map(),wh:[],quoteLines:[],quotations:[],quoteSelected:null,vatRate:7,busy:false,company:{},specialPrices:[],selectedCustomer:0,imageIds:[],posCustomer:0,posPrices:new Map(),posPriceReady:false,posMethod:"cash",customerLookupResults:null,customerHistory:null,salesOutstanding:false,salesCursor:null,search:{},posVatMode:'exclusive',lastSale:null};
+const labels = {dashboard:'ภาพรวมธุรกิจ',pos:'ขายหน้าร้าน POS',wholesale:'ขายส่ง / จัดส่ง',sales:'บิลขาย / ลูกหนี้',quotations:'ใบเสนอราคา',inventory:'สินค้าและสต๊อก',customers:'ลูกค้า',expenses:'ค่าใช้จ่าย',reports:'รายงาน',users:'ผู้ใช้งาน',prices:'ราคาพิเศษ',settings:'ตั้งค่าบริษัท'};
 const roleLabels = {admin:'เจ้าของระบบ',sales:'พนักงานขาย',warehouse:'พนักงานคลัง',accountant:'พนักงานบัญชี'};
 const navGroups = [
- ['งานขาย',['dashboard','pos','wholesale','sales']],
+ ['งานขาย',['dashboard','pos','wholesale','sales','quotations']],
  ['ข้อมูลร้าน',['inventory','customers','prices']],
  ['หลังร้าน',['expenses','reports','users','settings','operations']],
 ];
 const roleViews = {
- admin:Object.keys(labels), sales:['dashboard','pos','wholesale','sales','inventory','customers','prices'],
- warehouse:['dashboard','wholesale','inventory'], accountant:['dashboard','wholesale','sales','inventory','customers','expenses','reports'],
+ admin:Object.keys(labels), sales:['dashboard','pos','wholesale','sales','quotations','inventory','customers','prices'],
+ warehouse:['dashboard','wholesale','inventory'], accountant:['dashboard','wholesale','sales','quotations','inventory','customers','expenses','reports'],
 };
 const $=id=>document.getElementById(id);
 const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -71,7 +71,7 @@ async function refresh(){
  if(!state.user)return;
  try{
   const needs=state.view;
-  const base=['dashboard','reports','pos','wholesale','sales','inventory','customers','prices'].includes(needs);
+  const base=['dashboard','reports','pos','wholesale','sales','quotations','inventory','customers','prices'].includes(needs);
   if(base){
   const requests=[api('/products'),api('/customers'),api('/api/online/dashboard'),api('/api/online/sales'),api('/api/online/orders'),api('/api/online/config')];if(state.user.role==='admin')requests.push(api('/users'));
   const results=await Promise.allSettled(requests);
@@ -83,6 +83,7 @@ async function refresh(){
    state.sales=salesPage.items;
    state.salesCursor=salesPage.next_before;
   }
+  if(needs==='quotations')state.quotations=(await api('/api/quotations')).items;
   if(needs==='expenses')state.expenses=(await api('/api/online/expenses')).items;
   if(needs==='users'&&state.user.role==='admin')state.users=(await api('/users')).items;
    if(needs==='settings'&&state.user.role==='admin')state.company=await api('/api/extended/company');
@@ -279,12 +280,14 @@ function render(){
  if(!state.user||root.dataset.operations)return;
  const view=$('view');
  if(!view)return;
+ const quoteForm=$('quote-form');
+ const quoteDraft=quoteForm?f(quoteForm):null;
  const wholesaleDraft=$('wh-form');
  const draft=wholesaleDraft?f(wholesaleDraft):null;
  const focused=document.activeElement;
  const cartAction=focused?.matches('.qty-control,.product[data-add]')?
   {attr:focused.hasAttribute('data-dec')?'data-dec':'data-add',id:focused.dataset.dec||focused.dataset.add,qty:focused.classList.contains('qty-control')}:null;
- const map={dashboard,pos,wholesale,sales,inventory:inventoryWithExtras,customers,expenses,reports,users,prices,settings};
+ const map={dashboard,pos,wholesale,sales,quotations,inventory:inventoryWithExtras,customers,expenses,reports,users,prices,settings};
  view.innerHTML=(map[state.view]||dashboard)();
  view.setAttribute('aria-busy','false');
  if(draft&&$('wh-form'))for(const [name,value] of Object.entries(draft)){
@@ -410,7 +413,7 @@ document.addEventListener('click',async event=>{
  }
  if(btn.id==='show-forgot'){showForgot();return;}
  if(btn.id==='show-login'){showLogin();return;}
- if(btn.id==='logout'){await api('/auth/logout',{method:'POST',body:{}});state.user=null;state.csrf=null;state.search={};state.cart.clear();state.wh=[];state.posCustomer=0;state.posPrices.clear();state.posPriceReady=false;state.posMethod='cash';state.posVatMode='exclusive';state.lastSale=null;window.erpPrinter.disconnect();showLogin();return;}
+ if(btn.id==='logout'){await api('/auth/logout',{method:'POST',body:{}});state.user=null;state.csrf=null;state.search={};state.cart.clear();state.wh=[];state.quoteLines=[];state.quotations=[];state.quoteSelected=null;state.posCustomer=0;state.posPrices.clear();state.posPriceReady=false;state.posMethod='cash';state.posVatMode='exclusive';state.lastSale=null;window.erpPrinter.disconnect();showLogin();return;}
  if(btn.dataset.add){const id=Number(btn.dataset.add);const p=state.products.find(p=>p.id===id);if(!p)return;const qty=state.cart.get(id)||0;if(qty>=p.stock)throw Error('สินค้าไม่พอ');state.cart.set(id,qty+1);render();return;}
  if(btn.dataset.dec){const id=Number(btn.dataset.dec),qty=(state.cart.get(id)||0)-1;if(qty<=0)state.cart.delete(id);else state.cart.set(id,qty);render();return;}
  if(btn.dataset.whdel!==undefined){state.wh.splice(Number(btn.dataset.whdel),1);render();return;}
