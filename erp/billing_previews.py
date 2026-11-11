@@ -59,9 +59,7 @@ def preview_detail(sale):
                 "quantity": line.quantity,
                 "unit_price": money(line.price),
             }
-            for line in db.session.scalars(
-                db.select(SaleLine).where(SaleLine.sale_id == sale.id).order_by(SaleLine.id)
-            )
+            for line in db.session.scalars(db.select(SaleLine).where(SaleLine.sale_id == sale.id).order_by(SaleLine.id))
         ],
     }
 
