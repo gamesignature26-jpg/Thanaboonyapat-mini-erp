@@ -16,6 +16,7 @@ from werkzeug.exceptions import HTTPException
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from .models import Customer, Payment, Product, Sale, SaleLine, StockMovement, User, db
+from .readiness import database_is_ready
 
 ROLES = ("admin", "sales", "warehouse", "accountant")
 CENT = Decimal("0.01")
@@ -147,6 +148,12 @@ def create_app(config=None):
     @app.get("/health")
     def health():
         return {"status": "ok"}
+
+    @app.get("/ready")
+    def ready():
+        if database_is_ready(db.engine):
+            return {"status": "ok"}, 200
+        return {"status": "unavailable"}, 503
 
     @app.get("/auth/csrf")
     def csrf():
