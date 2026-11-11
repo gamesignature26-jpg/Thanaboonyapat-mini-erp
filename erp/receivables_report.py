@@ -36,7 +36,7 @@ def receivables():
         query = query.where(Customer.name.ilike(f"%{search}%"))
     groups = list(db.session.execute(query))
     cent = Decimal("0.01")
-    grand_total = sum((Decimal(row.outstanding) for row in groups), Decimal("0"))
+    grand_total = sum((Decimal(row.outstanding) for row in groups), Decimal(0))
     return {
         "items": [
             {
