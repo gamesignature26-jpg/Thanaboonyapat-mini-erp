@@ -49,7 +49,10 @@ def test_billing_note_list_filters_and_pages(seeded, client):
     first = post(client, token, "/sales", {"customer_id": cid, "lines": [{"product_id": pid, "quantity": 1}]})
     second = post(client, token, "/sales", {"customer_id": cid, "lines": [{"product_id": pid, "quantity": 1}]})
     sid1, sid2 = first.json["id"], second.json["id"]
-    assert post(client, token, f"/sales/{sid1}/payments", {"amount": "107.00", "reference": "bill-full-001"}).status_code == 201
+    assert (
+        post(client, token, f"/sales/{sid1}/payments", {"amount": "107.00", "reference": "bill-full-001"}).status_code
+        == 201
+    )
     page = client.get("/api/billing-notes?limit=1").json
     assert [x["sale_id"] for x in page["items"]] == [sid2]
     assert page["next_before"] is None
@@ -66,7 +69,7 @@ def test_billing_previews_use_immutable_sale_snapshots_and_escape_print(seeded, 
     made = post(client, token, "/sales", {"customer_id": cid, "lines": [{"product_id": pid, "quantity": 1}]})
     sid = made.json["id"]
     with app.app_context():
-        db.session.get(Customer, cid).name = '<img src=x onerror=alert(1)>'
+        db.session.get(Customer, cid).name = "<img src=x onerror=alert(1)>"
         db.session.get(Product, pid).name = "Changed product name"
         db.session.commit()
     detail = client.get(f"/api/billing-notes/{sid}").json
