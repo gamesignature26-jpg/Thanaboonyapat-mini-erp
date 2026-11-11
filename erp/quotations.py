@@ -132,9 +132,7 @@ def detail(quote):
                 "created_at": event.created_at.isoformat(),
             }
             for event in db.session.scalars(
-                db.select(QuotationEvent)
-                .where(QuotationEvent.quotation_id == quote.id)
-                .order_by(QuotationEvent.id)
+                db.select(QuotationEvent).where(QuotationEvent.quotation_id == quote.id).order_by(QuotationEvent.id)
             )
         ],
         "lines": [
