@@ -184,9 +184,7 @@ def create_return():
         quantities[sale_line_id] = quantity
     sale_lines = list(
         db.session.scalars(
-            db.select(SaleLine)
-            .where(SaleLine.sale_id == sale.id, SaleLine.id.in_(quantities))
-            .order_by(SaleLine.id)
+            db.select(SaleLine).where(SaleLine.sale_id == sale.id, SaleLine.id.in_(quantities)).order_by(SaleLine.id)
         )
     )
     if len(sale_lines) != len(quantities):
@@ -284,7 +282,10 @@ def inspect_return(return_id):
     if condition == "resellable":
         products = list(
             db.session.scalars(
-                db.select(Product).where(Product.id.in_([item.product_id for item in items])).order_by(Product.id).with_for_update()
+                db.select(Product)
+                .where(Product.id.in_([item.product_id for item in items]))
+                .order_by(Product.id)
+                .with_for_update()
             )
         )
         by_id = {product.id: product for product in products}
