@@ -3,17 +3,17 @@
 'use strict';
 const root = document.getElementById('root');
 const toast = document.getElementById('toast');
-const state = {user:null,csrf:null,view:'dashboard',products:[],customers:[],sales:[],orders:[],expenses:[],users:[],summary:null,cart:new Map(),wh:[],quoteLines:[],quotations:[],quoteSelected:null,returns:[],returnsCursor:null,suppliers:[],purchases:[],purchaseCursor:null,purchaseLines:[],purchaseSelected:null,costEvidence:null,billingBatches:[],billingCursor:null,billingSelected:null,billingCustomerId:null,billingEligible:[],billingEligibleCursor:null,returnEligible:null,returnLines:[],returnSelected:null,returnReason:'',vatRate:7,busy:false,company:{},specialPrices:[],selectedCustomer:0,imageIds:[],posCustomer:0,posPrices:new Map(),posPriceReady:false,posMethod:"cash",customerLookupResults:null,customerHistory:null,salesOutstanding:false,salesCursor:null,search:{},posVatMode:'exclusive',lastSale:null};
-const labels = {dashboard:'ภาพรวมธุรกิจ',pos:'ขายหน้าร้าน POS',wholesale:'ขายส่ง / จัดส่ง',sales:'บิลขาย / ลูกหนี้',billing_batches:'ใบวางบิลรวม',quotations:'ใบเสนอราคา',returns:'รับคืนสินค้า',purchases:'จัดซื้อและรับสินค้า',inventory:'สินค้าและสต๊อก',customers:'ลูกค้า',expenses:'ค่าใช้จ่าย',reports:'รายงาน',users:'ผู้ใช้งาน',prices:'ราคาพิเศษ',settings:'ตั้งค่าบริษัท'};
+const state = {user:null,csrf:null,view:'dashboard',products:[],customers:[],sales:[],orders:[],expenses:[],users:[],summary:null,cart:new Map(),wh:[],quoteLines:[],quotations:[],quoteSelected:null,returns:[],returnsCursor:null,suppliers:[],purchases:[],purchaseCursor:null,purchaseLines:[],purchaseSelected:null,costEvidence:null,billingBatches:[],billingCursor:null,billingSelected:null,creditDrafts:[],creditCursor:null,creditSelected:null,billingCustomerId:null,billingEligible:[],billingEligibleCursor:null,returnEligible:null,returnLines:[],returnSelected:null,returnReason:'',vatRate:7,busy:false,company:{},specialPrices:[],selectedCustomer:0,imageIds:[],posCustomer:0,posPrices:new Map(),posPriceReady:false,posMethod:"cash",customerLookupResults:null,customerHistory:null,salesOutstanding:false,salesCursor:null,search:{},posVatMode:'exclusive',lastSale:null};
+const labels = {dashboard:'ภาพรวมธุรกิจ',pos:'ขายหน้าร้าน POS',wholesale:'ขายส่ง / จัดส่ง',sales:'บิลขาย / ลูกหนี้',billing_batches:'ใบวางบิลรวม',credit_drafts:'ใบลดหนี้ร่าง',quotations:'ใบเสนอราคา',returns:'รับคืนสินค้า',purchases:'จัดซื้อและรับสินค้า',inventory:'สินค้าและสต๊อก',customers:'ลูกค้า',expenses:'ค่าใช้จ่าย',reports:'รายงาน',users:'ผู้ใช้งาน',prices:'ราคาพิเศษ',settings:'ตั้งค่าบริษัท'};
 const roleLabels = {admin:'เจ้าของระบบ',sales:'พนักงานขาย',warehouse:'พนักงานคลัง',accountant:'พนักงานบัญชี'};
 const navGroups = [
- ['งานขาย',['dashboard','pos','wholesale','sales','billing_batches','quotations','returns']],
+ ['งานขาย',['dashboard','pos','wholesale','sales','billing_batches','credit_drafts','quotations','returns']],
  ['ข้อมูลร้าน',['inventory','customers','prices','purchases']],
  ['หลังร้าน',['expenses','reports','users','settings','operations']],
 ];
 const roleViews = {
  admin:Object.keys(labels), sales:['dashboard','pos','wholesale','sales','billing_batches','quotations','returns','inventory','customers','prices'],
- warehouse:['dashboard','wholesale','inventory','returns','purchases'], accountant:['dashboard','wholesale','sales','billing_batches','quotations','returns','purchases','inventory','customers','expenses','reports'],
+ warehouse:['dashboard','wholesale','inventory','returns','purchases'], accountant:['dashboard','wholesale','sales','billing_batches','credit_drafts','quotations','returns','purchases','inventory','customers','expenses','reports'],
 };
 const $=id=>document.getElementById(id);
 const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -71,7 +71,7 @@ async function refresh(){
  if(!state.user)return;
  try{
   const needs=state.view;
-  const base=['dashboard','reports','pos','wholesale','sales','billing_batches','quotations','returns','purchases','inventory','customers','prices'].includes(needs);
+  const base=['dashboard','reports','pos','wholesale','sales','billing_batches','credit_drafts','quotations','returns','purchases','inventory','customers','prices'].includes(needs);
   if(base){
   const requests=[api('/products'),api('/customers'),api('/api/online/dashboard'),api('/api/online/sales'),api('/api/online/orders'),api('/api/online/config')];if(state.user.role==='admin')requests.push(api('/users'));
   const results=await Promise.allSettled(requests);
@@ -90,6 +90,10 @@ async function refresh(){
     const available=await api('/api/billing-batches/eligible?customer_id='+state.billingCustomerId);
     state.billingEligible=available.items;state.billingEligibleCursor=available.next_before;
    }
+  }
+  if(needs==='credit_drafts'){
+   const page=await api('/api/credit-note-drafts');
+   state.creditDrafts=page.items;state.creditCursor=page.next_before;
   }
   if(needs==='quotations')state.quotations=(await api('/api/quotations')).items;
   if(needs==='returns'){const page=await api('/api/returns');state.returns=page.items;state.returnsCursor=page.next_before;}
@@ -309,6 +313,14 @@ function customers(){
  <section class="card"><h2>เพิ่มลูกค้า</h2><form id="customer-form">${field('ชื่อร้านค้า / ลูกค้า','name','text','','required maxlength="200"')}${field('ที่อยู่','address','text','','required maxlength="1000"')}${field('เลขผู้เสียภาษี 13 หลัก (ถ้ามี)','tax_id','text','','pattern="[0-9]{13}" maxlength="13"')}<button class="btn">บันทึกลูกค้า</button></form></section></div>`;
 }
 function expenses(){return `<div class="grid g2"><div class="card"><h2>บันทึกค่าใช้จ่าย</h2><p>ใช้ติดตามรายจ่าย ไม่ใช่ลงบัญชีคู่</p><form id="expense-form">${field('หมวดหมู่','category','text','ขนส่ง','required maxlength="80"')}${field('รายละเอียด','description','text','','required maxlength="250"')}${field('จำนวนเงิน (บาท)','amount','number','','min="0.01" step="0.01" required')}<div class="field"><label>ชำระโดย</label><select name="method">${opt('cash','เงินสด')}${opt('transfer','โอนเงิน')}</select></div><button class="btn">บันทึกรายจ่าย</button></form></div><div class="card"><h2>รายจ่ายล่าสุด</h2><div class="tablewrap"><table><tbody>${state.expenses.map(x=>`<tr><td>#${x.id} ${esc(x.category)}<div class="muted">${esc(x.description)}</div><button class="btn secondary slim" data-op-expense="${x.id}">แนบรูปใบเสร็จ</button></td><td class="num">${fmt(x.amount)}</td></tr>`).join('')}</tbody></table></div></div></div>`;}
+function creditDrafts(){
+ const rows=state.creditDrafts.map(x=>`<tr><td>${esc(x.number)}</td><td>บิล #${x.sale_id} / คืน #${x.return_id}</td><td>${fmt(x.credit_total)}</td><td>${x.status==='draft'?'รอตรวจสอบ':'ยกเลิก'}</td><td><button type="button" class="btn secondary slim" data-credit-detail="${x.id}">รายละเอียด</button></td></tr>`).join('');
+ const d=state.creditSelected;
+ return `<div class="grid g2"><section class="card"><h2>ใบลดหนี้ทางการเงินแบบร่าง</h2><p class="alert">ใช้ตรวจสอบยอดจากรายการสินค้าที่คลังรับคืนแล้วเท่านั้น ไม่ใช่ใบลดหนี้ภาษี และไม่ตัดลูกหนี้หรือคืนเงินอัตโนมัติ</p>
+ <form id="credit-create-form">${field('เลขรายการคืนที่ตรวจรับแล้ว','return_id','number','','min="1" step="1" required')}${field('เหตุผลการลดหนี้','reason','text','','required maxlength="600"')}${field('ฐานยอดลดหนี้ก่อน VAT (บาท)','amount_ex_vat','number','','min="0" step="0.01" required')}${field('VAT ที่เสนอให้ตรวจสอบ (บาท)','vat_amount','number','0.00','min="0" step="0.01" required')}<button class="btn">บันทึกใบลดหนี้ทางการเงินร่าง</button></form></section>
+ <section class="card"><h2>ประวัติเอกสารร่าง</h2><div class="tablewrap"><table><thead><tr><th>เลขร่าง</th><th>อ้างอิง</th><th>ยอดเสนอ</th><th>สถานะ</th><th></th></tr></thead><tbody>${rows||'<tr><td colspan="5">ยังไม่มีรายการ</td></tr>'}</tbody></table></div>${state.creditCursor?'<button type="button" class="btn secondary" data-credit-more="1">ดูรายการเพิ่มเติม</button>':''}</section></div>
+ ${d?`<section class="card" id="credit-draft-detail"><h2>รายละเอียด ${esc(d.number)}</h2><p>สถานะ ${esc(d.status)} · ลูกค้า ${esc(d.customer_name)} · บิล #${d.sale_id} · คืน #${d.return_id}</p><p>ฐานก่อน VAT ${fmt(d.amount_ex_vat)} + VAT ${fmt(d.vat_amount)} = <strong>${fmt(d.credit_total)}</strong></p><p>ค้างชำระปัจจุบัน ${fmt(d.current_sale_balance)} (ไม่มีการตัดยอด)</p><p>เหตุผล: ${esc(d.reason)}</p><a class="btn secondary slim" target="_blank" rel="noopener" href="/api/credit-note-drafts/${d.id}/print">พิมพ์เอกสารตรวจสอบร่าง</a>${d.status==='draft'?`<form id="credit-void-form">${field('เหตุผลการยกเลิกร่าง','reason','text','','required maxlength="600"')}<button class="btn secondary">ยกเลิกร่าง</button></form>`:''}</section>`:''}`;
+}
 function reports(){
  const s=state.summary||{};const e=state.costEvidence||{};
  const rows=(e.items||[]).map(x=>`<tr><td>${esc(x.sku)}<div class="muted">${esc(x.name)}</div></td><td class="num">${x.stock_units}</td><td class="num">${x.received_purchase_units}</td><td class="num">${fmt(x.received_purchase_cost_ex_vat)}</td><td>${x.stock_movement_reconciles?'ยอดตรง':'ต้องตรวจสอบ'}</td></tr>`).join('');
@@ -373,7 +385,7 @@ function render(){
  const focused=document.activeElement;
  const cartAction=focused?.matches('.qty-control,.product[data-add]')?
   {attr:focused.hasAttribute('data-dec')?'data-dec':'data-add',id:focused.dataset.dec||focused.dataset.add,qty:focused.classList.contains('qty-control')}:null;
- const map={dashboard,pos,wholesale,sales,billing_batches:billingBatches,quotations,returns:returnIntake,purchases:purchasing,inventory:inventoryWithExtras,customers,expenses,reports,users,prices,settings};
+ const map={dashboard,pos,wholesale,sales,billing_batches:billingBatches,credit_drafts:creditDrafts,quotations,returns:returnIntake,purchases:purchasing,inventory:inventoryWithExtras,customers,expenses,reports,users,prices,settings};
  view.innerHTML=(map[state.view]||dashboard)();
  if($('quote-status-note'))$('quote-status-note').value=quoteStatusDraft;
  if($('return-reason'))$('return-reason').value=returnReasonDraft;
@@ -454,6 +466,28 @@ async function send(form){if(state.busy)return;state.busy=true;const submit=form
  }
  else if(id==='pos-form')await confirmSale('pos',form);
  else if(id==='wh-form')await confirmSale('wholesale',form);
+ else if(id==='credit-create-form'){
+  const body={return_id:Number(v.return_id),reason:v.reason,amount_ex_vat:Number(v.amount_ex_vat).toFixed(2),vat_amount:Number(v.vat_amount).toFixed(2)};
+  if(!Number.isInteger(body.return_id)||body.return_id<1)throw Error('กรุณากรอกเลขรายการคืน');
+  if(!Number.isFinite(Number(v.amount_ex_vat))||!Number.isFinite(Number(v.vat_amount)))throw Error('จำนวนเงินไม่ถูกต้อง');
+  const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify(body)));
+  const hash=[...new Uint8Array(digest)].map(x=>x.toString(16).padStart(2,'0')).join('');
+  const slot='tb-pending-credit-draft-v1';
+  let pending=null;try{pending=JSON.parse(sessionStorage.getItem(slot)||'null');}catch(_){/* retry metadata invalid */}
+  const request_key=pending?.hash===hash?pending.key:uuid();
+  sessionStorage.setItem(slot,JSON.stringify({hash,key:request_key}));
+  const result=await api('/api/credit-note-drafts',{method:'POST',body:{...body,request_key}});
+  sessionStorage.removeItem(slot);
+  state.creditSelected=await api(`/api/credit-note-drafts/${result.id}`);
+  warn('บันทึกร่างยอดลดหนี้เพื่อรอตรวจสอบแล้ว');await refresh();
+ }
+ else if(id==='credit-void-form'){
+  if(!state.creditSelected)throw Error('ยังไม่ได้เลือกเอกสาร');
+  const id=state.creditSelected.id;
+  await api(`/api/credit-note-drafts/${id}/void`,{method:'POST',body:{reason:v.reason}});
+  state.creditSelected=await api(`/api/credit-note-drafts/${id}`);
+  warn('ยกเลิกเอกสารร่างแล้ว');await refresh();
+ }
  else if(id==='billing-customer-form'){
   const customerId=Number(v.customer_id);
   if(!Number.isInteger(customerId)||customerId<1)throw Error('กรุณาเลือกลูกค้า');
@@ -620,6 +654,11 @@ document.addEventListener('click',async event=>{
  if(btn.dataset.costMore&&state.costEvidence?.next_after){
   const page=await api('/api/reports/cost-evidence?limit=50&after='+state.costEvidence.next_after);
   state.costEvidence.items.push(...page.items);state.costEvidence.next_after=page.next_after;render();return;
+ }
+ if(btn.dataset.creditDetail){state.creditSelected=await api(`/api/credit-note-drafts/${Number(btn.dataset.creditDetail)}`);render();return;}
+ if(btn.dataset.creditMore&&state.creditCursor){
+  const page=await api('/api/credit-note-drafts?before='+state.creditCursor);
+  state.creditDrafts.push(...page.items);state.creditCursor=page.next_before;render();return;
  }
  if(btn.dataset.billingDetail){state.billingSelected=await api(`/api/billing-batches/${Number(btn.dataset.billingDetail)}`);render();return;}
  if(btn.dataset.billingMore&&state.billingCursor){
