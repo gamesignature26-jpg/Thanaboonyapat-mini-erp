@@ -48,13 +48,14 @@ def test_receivables_search_and_empty_results(seeded, client):
     assert client.get("/api/reports/receivables?q=Synthetic").json["total_outstanding"] == "107.00"
 
 
-
 def test_receivables_page_preserves_totals_and_matches_percent_literally(seeded, client):
     token, pid, cid = seeded
     second = post(client, token, "/customers", {"name": "Buyer_100%", "address": "Synthetic"})
     assert second.status_code == 201
     for customer_id in (cid, second.json["id"]):
-        sale = post(client, token, "/sales", {"customer_id": customer_id, "lines": [{"product_id": pid, "quantity": 1}]})
+        sale = post(
+            client, token, "/sales", {"customer_id": customer_id, "lines": [{"product_id": pid, "quantity": 1}]}
+        )
         assert sale.status_code == 201
 
     first = client.get("/api/reports/receivables?limit=1&offset=0")
