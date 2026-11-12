@@ -509,4 +509,8 @@ def create_app(config=None):
 
     app.register_blueprint(billing_previews_bp)
 
+    from .return_intake import bp as return_intake_bp
+
+    app.register_blueprint(return_intake_bp)
+
     return app
