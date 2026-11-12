@@ -32,7 +32,7 @@ def test_return_draft_does_not_mutate_stock_or_ledger(seeded, client, app):
         line_id = db.session.scalar(db.select(SaleLine.id).where(SaleLine.sale_id == sale_id))
     response = return_request(client, token, sale_id, line_id)
     assert response.status_code == 201
-    draft = client.get(f'/api/returns/{response.json["id"]}')
+    draft = client.get(f"/api/returns/{response.json['id']}")
     assert draft.status_code == 200
     assert draft.json["number"].startswith("RETURN-DRAFT-")
     assert draft.json["status"] == "draft"
@@ -64,7 +64,9 @@ def test_return_inspection_restock_once_without_changing_receivables(seeded, cli
     assert second.status_code == 200
     assert second.json["duplicate"] is True
     changed = post(
-        client, warehouse, f"/api/returns/{rid}/inspect",
+        client,
+        warehouse,
+        f"/api/returns/{rid}/inspect",
         {"condition": "damaged", "inspection_note": "Trying to overwrite"},
     )
     assert changed.status_code == 409
@@ -83,10 +85,12 @@ def test_damaged_return_is_received_but_not_restocked(seeded, client, app):
     sid = create_sale(client, token, pid, cid)
     with app.app_context():
         line_id = db.session.scalar(db.select(SaleLine.id).where(SaleLine.sale_id == sid))
-    rid = return_request(client, token, sid, line_id, qty=1)["json"]["id"]
+    rid = return_request(client, token, sid, line_id, qty=1).json["id"]
     warehouse = login(client, "warehouse")
     response = post(
-        client, warehouse, f"/api/returns/{rid}/inspect",
+        client,
+        warehouse,
+        f"/api/returns/{rid}/inspect",
         {"condition": "damaged", "inspection_note": "Leaking bottle"},
     )
     assert response.status_code == 200
@@ -106,8 +110,8 @@ def test_return_overlapping_drafts_must_not_overreturn(seeded, client, app):
     assert a.status_code == 201 and b.status_code == 201
     warehouse = login(client, "warehouse")
     inspect = {"condition": "resellable", "inspection_note": "Physical inspection complete"}
-    assert post(client, warehouse, f'/api/returns/{a.json["id"]}/inspect', inspect).status_code == 200
-    assert post(client, warehouse, f'/api/returns/{b.json["id"]}/inspect', inspect).status_code == 409
+    assert post(client, warehouse, f"/api/returns/{a.json['id']}/inspect", inspect).status_code == 200
+    assert post(client, warehouse, f"/api/returns/{b.json['id']}/inspect", inspect).status_code == 409
     remaining = client.get(f"/api/returns/sales/{sid}/eligible").json
     assert remaining["lines"][0]["returned_quantity"] == 2
     assert remaining["lines"][0]["remaining_quantity"] == 1
@@ -131,15 +135,24 @@ def test_return_retries_conflicts_and_reject_path(seeded, client, app):
     rejected = post(
         client,
         warehouse,
-        f'/api/returns/{first.json["id"]}/reject',
+        f"/api/returns/{first.json['id']}/reject",
         {"inspection_note": "Customer did not bring goods"},
     )
     assert rejected.status_code == 200
     assert rejected.json["status"] == "rejected"
-    assert post(client, warehouse, f'/api/returns/{first.json["id"]}/reject',
-                {"inspection_note": "Different"}).status_code == 409
-    assert post(client, warehouse, f'/api/returns/{first.json["id"]}/inspect',
-                {"condition": "resellable", "inspection_note": "Late"}).status_code == 409
+    assert (
+        post(client, warehouse, f"/api/returns/{first.json['id']}/reject", {"inspection_note": "Different"}).status_code
+        == 409
+    )
+    assert (
+        post(
+            client,
+            warehouse,
+            f"/api/returns/{first.json['id']}/inspect",
+            {"condition": "resellable", "inspection_note": "Late"},
+        ).status_code
+        == 409
+    )
 
 
 def test_return_validation_roles_and_listing(seeded, client, app):
@@ -150,8 +163,18 @@ def test_return_validation_roles_and_listing(seeded, client, app):
     assert client.get("/api/returns/sales/99999/eligible").status_code == 404
     bads = [
         {"request_key": "short", "sale_id": sid, "lines": [{"sale_line_id": line_id, "quantity": 1}], "reason": "abc"},
-        {"request_key": "synthetic-invalid-returns-001", "sale_id": sid, "lines": [{"sale_line_id": line_id, "quantity": 4}], "reason": "abc"},
-        {"request_key": "synthetic-invalid-returns-002", "sale_id": sid, "lines": [{"sale_line_id": line_id, "quantity": 1}] * 2, "reason": "abc"},
+        {
+            "request_key": "synthetic-invalid-returns-001",
+            "sale_id": sid,
+            "lines": [{"sale_line_id": line_id, "quantity": 4}],
+            "reason": "abc",
+        },
+        {
+            "request_key": "synthetic-invalid-returns-002",
+            "sale_id": sid,
+            "lines": [{"sale_line_id": line_id, "quantity": 1}] * 2,
+            "reason": "abc",
+        },
     ]
     assert [post(client, token, "/api/returns", body).status_code for body in bads] == [400, 409, 400]
     assert client.get("/api/returns").json["items"] == []
@@ -165,10 +188,15 @@ def test_return_validation_roles_and_listing(seeded, client, app):
     assert client.get("/api/returns").status_code == 200
     assert post(client, warehouse, "/api/returns", bads[0]).status_code == 403
     sales = login(client, "sales")
-    assert post(
-        client, sales, f'/api/returns/{first.json["id"]}/inspect',
-        {"condition": "resellable", "inspection_note": "Unauthorized"},
-    ).status_code == 403
+    assert (
+        post(
+            client,
+            sales,
+            f"/api/returns/{first.json['id']}/inspect",
+            {"condition": "resellable", "inspection_note": "Unauthorized"},
+        ).status_code
+        == 403
+    )
     login(client, "accountant")
     assert client.get("/api/returns").status_code == 200
-    assert client.get(f'/api/returns/{first.json["id"]}').status_code == 200
+    assert client.get(f"/api/returns/{first.json['id']}").status_code == 200
