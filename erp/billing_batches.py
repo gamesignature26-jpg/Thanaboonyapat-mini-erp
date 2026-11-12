@@ -88,16 +88,11 @@ def summary(batch):
 def detail(batch):
     lines = list(
         db.session.scalars(
-            db.select(BillingBatchLine)
-            .where(BillingBatchLine.batch_id == batch.id)
-            .order_by(BillingBatchLine.sale_id)
+            db.select(BillingBatchLine).where(BillingBatchLine.batch_id == batch.id).order_by(BillingBatchLine.sale_id)
         )
     )
     sales = {
-        sale.id: sale
-        for sale in db.session.scalars(
-            db.select(Sale).where(Sale.id.in_(line.sale_id for line in lines))
-        )
+        sale.id: sale for sale in db.session.scalars(db.select(Sale).where(Sale.id.in_(line.sale_id for line in lines)))
     }
     items = []
     outstanding = Decimal("0.00")
@@ -147,9 +142,7 @@ def eligible_sales():
         .join(BillingBatch, BillingBatch.id == BillingBatchLine.batch_id)
         .where(BillingBatch.status == "draft")
     )
-    query = db.select(Sale).where(
-        Sale.customer_id == customer_id, Sale.paid < Sale.total, ~Sale.id.in_(active_sales)
-    )
+    query = db.select(Sale).where(Sale.customer_id == customer_id, Sale.paid < Sale.total, ~Sale.id.in_(active_sales))
     if before:
         query = query.where(Sale.id < before)
     rows = list(db.session.scalars(query.order_by(Sale.id.desc()).limit(limit + 1)))
@@ -203,9 +196,7 @@ def create_billing_batch():
         abort(400, "Invalid note")
 
     # Lock sales in stable order to serialize concurrent billing draft claims.
-    sales = list(
-        db.session.scalars(db.select(Sale).where(Sale.id.in_(ids)).order_by(Sale.id).with_for_update())
-    )
+    sales = list(db.session.scalars(db.select(Sale).where(Sale.id.in_(ids)).order_by(Sale.id).with_for_update()))
     if len(sales) != len(ids):
         abort(404, "Sale not found")
     if any(sale.customer_id != customer_id for sale in sales):
