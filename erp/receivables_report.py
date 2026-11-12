@@ -21,6 +21,18 @@ def receivables():
     search = request.args.get("q", "").strip()
     if len(search) > 100:
         abort(400, "Search too long")
+    limit_raw = request.args.get("limit", "100")
+    offset_raw = request.args.get("offset", "0")
+    if (
+        not limit_raw.isascii()
+        or not limit_raw.isdecimal()
+        or not 1 <= int(limit_raw) <= 100
+        or not offset_raw.isascii()
+        or not offset_raw.isdecimal()
+        or int(offset_raw) > 1000000
+    ):
+        abort(400, "Invalid pagination")
+    limit, offset = int(limit_raw), int(offset_raw)
     query = (
         db.select(
             Customer.id.label("customer_id"),
@@ -34,7 +46,8 @@ def receivables():
         .order_by(Customer.name, Customer.id)
     )
     if search:
-        query = query.where(Customer.name.ilike(f"%{search}%"))
+        pattern = "%" + search.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+        query = query.where(Customer.name.ilike(pattern, escape="\\"))
     groups = list(db.session.execute(query))
     cent = Decimal("0.01")
     grand_total = sum((Decimal(row.outstanding) for row in groups), Decimal(0))
@@ -46,10 +59,11 @@ def receivables():
                 "unpaid_sales": row.unpaid_sales,
                 "outstanding": str(Decimal(row.outstanding).quantize(cent)),
             }
-            for row in groups[:100]
+            for row in groups[offset : offset + limit]
         ],
         "total_outstanding": str(grand_total.quantize(cent)),
         "open_invoices": sum(row.unpaid_sales for row in groups),
-        "has_more": len(groups) > 100,
+        "has_more": len(groups) > offset + limit,
+        "next_offset": offset + limit if len(groups) > offset + limit else None,
         "note": "ยอดลูกหนี้คงค้างจากการขาย ไม่ใช่รายงานอายุหนี้หรือยอดตามบัญชีแยกประเภท",
     }
