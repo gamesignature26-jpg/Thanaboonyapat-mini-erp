@@ -176,6 +176,7 @@ def main():
             page.locator('#return-inspect-form input[name="inspection_note"]').fill("Sealed packs physically verified")
             page.get_by_role("button", name="ยืนยันรับคืน", exact=True).click()
             page.locator("#return-detail").get_by_text("ตรวจรับแล้ว", exact=False).wait_for()
+            page.get_by_role("button", name="เมนูทั้งหมด", exact=True).click()
             page.get_by_role("button", name="จัดซื้อและรับสินค้า", exact=True).click()
             page.locator('#supplier-form input[name="name"]').fill("Synthetic Water Supplier")
             page.get_by_role("button", name="บันทึกซัพพลายเออร์", exact=True).click()
