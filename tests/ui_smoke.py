@@ -193,7 +193,7 @@ def main():
             page.get_by_role("button", name="ใบลดหนี้ร่าง", exact=True).click()
             page.locator('#credit-create-form input[name="return_id"]').fill("1")
             page.locator('#credit-create-form input[name="reason"]').fill("Synthetic accounting review")
-            page.locator('#credit-create-form input[name="amount_ex_vat"]').fill("80.00")
+            page.locator('#credit-create-form input[name="amount_ex_vat"]').fill("60.00")
             page.locator('#credit-create-form input[name="vat_amount"]').fill("0.00")
             page.get_by_role("button", name="บันทึกใบลดหนี้ทางการเงินร่าง", exact=True).click()
             page.locator("#credit-draft-detail").get_by_text("CREDIT-DRAFT-000001", exact=False).wait_for()
