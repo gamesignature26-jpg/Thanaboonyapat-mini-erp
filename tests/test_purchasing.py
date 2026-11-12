@@ -21,7 +21,7 @@ def purchase(supplier_id, pid, key="synthetic-purchase-order-00001"):
 
 
 def test_supplier_permissions_and_validation(client, seeded):
-    token, pid, cid = seeded
+    token, pid, _cid = seeded
     anon = client.application.test_client()
     assert anon.get("/api/suppliers").status_code == 401
     assert anon.get("/api/purchases").status_code == 401
@@ -41,7 +41,7 @@ def test_supplier_permissions_and_validation(client, seeded):
 
 
 def test_draft_purchase_is_immutable_and_has_no_stock_or_financial_side_effects(seeded, client, app):
-    token, pid, cid = seeded
+    token, pid, _cid = seeded
     sid = supplier(client, token)
     made = post(client, token, "/api/purchases", purchase(sid, pid))
     assert made.status_code == 201
@@ -59,7 +59,7 @@ def test_draft_purchase_is_immutable_and_has_no_stock_or_financial_side_effects(
 
 
 def test_purchase_idempotency_and_conflicting_reuse(seeded, client, app):
-    token, pid, cid = seeded
+    token, pid, _cid = seeded
     sid = supplier(client, token)
     body = purchase(sid, pid)
     first = post(client, token, "/api/purchases", body)
@@ -74,7 +74,7 @@ def test_purchase_idempotency_and_conflicting_reuse(seeded, client, app):
 
 
 def test_receiving_adds_stock_only_once_and_keeps_cost_snapshot(seeded, client, app):
-    token, pid, cid = seeded
+    token, pid, _cid = seeded
     sid = supplier(client, token)
     order = post(client, token, "/api/purchases", purchase(sid, pid))
     order_id = order.json["id"]
@@ -104,7 +104,7 @@ def test_receiving_adds_stock_only_once_and_keeps_cost_snapshot(seeded, client, 
 
 
 def test_invalid_purchase_quantities_and_prices_never_move_stock(seeded, client, app):
-    token, pid, cid = seeded
+    token, pid, _cid = seeded
     sid = supplier(client, token)
     base = purchase(sid, pid)
     cases = [
@@ -122,7 +122,7 @@ def test_invalid_purchase_quantities_and_prices_never_move_stock(seeded, client,
 
 
 def test_purchase_list_page_and_roles(seeded, client):
-    token, pid, cid = seeded
+    token, pid, _cid = seeded
     sid = supplier(client, token)
     for key in ("synthetic-purchasing-one-00001", "synthetic-purchasing-two-00002"):
         assert post(client, token, "/api/purchases", purchase(sid, pid, key)).status_code == 201
@@ -141,7 +141,7 @@ def test_purchase_list_page_and_roles(seeded, client):
 
 
 def test_purchase_receipt_rejects_bad_request_and_unauthorized_roles(seeded, client, app):
-    token, pid, cid = seeded
+    token, pid, _cid = seeded
     sid = supplier(client, token)
     order = post(client, token, "/api/purchases", purchase(sid, pid)).json["id"]
     assert post(client, token, f"/api/purchases/{order}/receive", {"receipt_note": ""}).status_code == 400
