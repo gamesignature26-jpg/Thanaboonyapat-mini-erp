@@ -189,7 +189,12 @@ def main():
             page.locator('#purchase-receive-form input[name="receipt_note"]').fill("Synthetic goods physically counted")
             page.get_by_role("button", name="ยืนยันรับสินค้าเข้าสต็อก", exact=True).click()
             page.locator("#purchase-detail").get_by_text("รับสินค้าแล้ว", exact=False).first.wait_for()
-            assert page.evaluate("async () => (await (await fetch('/products')).json()).items.find(p => p.sku === 'UI-WATER').stock") == 11
+            assert (
+                page.evaluate(
+                    "async () => (await (await fetch('/products')).json()).items.find(p => p.sku === 'UI-WATER').stock"
+                )
+                == 11
+            )
             page.get_by_role("button", name="เมนูทั้งหมด", exact=True).click()
             page.get_by_role("button", name="รายสัปดาห์ / ค่าแรง / หลักฐาน", exact=True).click()
             page.get_by_role("heading", name="ยืนยันอีเมล", exact=True).wait_for()
