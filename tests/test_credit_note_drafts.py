@@ -50,7 +50,9 @@ def test_credit_draft_access_and_no_business_side_effects(seeded, client, app):
     assert anon.get("/api/credit-note-drafts").status_code == 401
     login(client, "sales")
     assert client.get("/api/credit-note-drafts").status_code == 403
-    assert post(client, login(client, "warehouse"), "/api/credit-note-drafts", request_body(return_id)).status_code == 403
+    assert (
+        post(client, login(client, "warehouse"), "/api/credit-note-drafts", request_body(return_id)).status_code == 403
+    )
     accountant = login(client, "accountant")
     response = post(client, accountant, "/api/credit-note-drafts", request_body(return_id))
     assert response.status_code == 201
@@ -85,9 +87,7 @@ def test_credit_draft_key_idempotency_limits_and_void(seeded, client, app):
     again = post(client, token, "/api/credit-note-drafts", request)
     assert again.status_code == 200
     assert again.json["id"] == first.json["id"] and again.json["duplicate"]
-    assert (
-        post(client, token, "/api/credit-note-drafts", {**request, "amount_ex_vat": "99.00"}).status_code == 409
-    )
+    assert post(client, token, "/api/credit-note-drafts", {**request, "amount_ex_vat": "99.00"}).status_code == 409
     assert (
         post(
             client,
@@ -108,9 +108,7 @@ def test_credit_draft_key_idempotency_limits_and_void(seeded, client, app):
         client, token, f"/api/credit-note-drafts/{first.json['id']}/void", {"reason": "Synthetic correction"}
     )
     assert removed.status_code == 200 and removed.json["status"] == "void"
-    repeat = post(
-        client, token, f"/api/credit-note-drafts/{first.json['id']}/void", {"reason": "Synthetic correction"}
-    )
+    repeat = post(client, token, f"/api/credit-note-drafts/{first.json['id']}/void", {"reason": "Synthetic correction"})
     assert repeat.status_code == 200
     assert (
         post(client, token, f"/api/credit-note-drafts/{first.json['id']}/void", {"reason": "Different"}).status_code
@@ -123,7 +121,9 @@ def test_credit_draft_key_idempotency_limits_and_void(seeded, client, app):
 
 def test_credit_draft_requires_received_return_not_just_request(seeded, client):
     token, pid, cid = seeded
-    sale_id = post(client, token, "/sales", {"customer_id": cid, "lines": [{"product_id": pid, "quantity": 1}]}).json["id"]
+    sale_id = post(client, token, "/sales", {"customer_id": cid, "lines": [{"product_id": pid, "quantity": 1}]}).json[
+        "id"
+    ]
     line_id = client.get(f"/api/returns/sales/{sale_id}/eligible").json["lines"][0]["sale_line_id"]
     intake = post(
         client,
