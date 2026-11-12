@@ -69,7 +69,7 @@ def test_receipts_are_evidence_but_not_verified_cogs_or_gross_profit(seeded, cli
 
 
 def test_cost_evidence_detects_stock_movement_drift_and_has_safe_paging(seeded, client, app):
-    token, pid, _ = seeded
+    _token, pid, _ = seeded
     with app.app_context():
         db.session.get(Product, pid).stock += 1  # Synthetic corruption: no matching audit movement.
         db.session.commit()
