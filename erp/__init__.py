@@ -513,4 +513,8 @@ def create_app(config=None):
 
     app.register_blueprint(return_intake_bp)
 
+    from .purchasing import bp as purchasing_bp
+
+    app.register_blueprint(purchasing_bp)
+
     return app
