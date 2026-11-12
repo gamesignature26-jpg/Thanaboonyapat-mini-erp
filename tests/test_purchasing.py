@@ -134,9 +134,9 @@ def test_purchase_list_page_and_roles(seeded, client):
     assert client.get("/api/purchases?before=foo").status_code == 400
     assert client.get("/api/suppliers?limit=0").status_code == 400
     assert client.get("/api/purchases/123456").status_code == 404
-    sales = login(client, "sales")
+    login(client, "sales")
     assert client.get("/api/purchases").status_code == 403
-    warehouse = login(client, "warehouse")
+    login(client, "warehouse")
     assert client.get("/api/purchases").status_code == 200
 
 
