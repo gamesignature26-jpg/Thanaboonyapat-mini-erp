@@ -127,14 +127,14 @@ def create_credit_note_draft():
     sale = db.session.get(Sale, intake.sale_id, with_for_update=True)
     if sale is None:
         abort(409, "Original sale unavailable")
-    if db.session.scalar(db.select(CreditNoteDraft.id).where(CreditNoteDraft.return_id == return_id)):
-        abort(409, "Return already has a financial review draft; voided drafts remain auditable")
     reason = text(body, "reason", 600)
     base = money(body.get("amount_ex_vat"))
     vat = money(body.get("vat_amount"))
     total = base + vat
     if total <= 0 or total > Decimal("999999999.99"):
         abort(400, "Invalid credit amount")
+    if db.session.scalar(db.select(CreditNoteDraft.id).where(CreditNoteDraft.return_id == return_id)):
+        abort(409, "Return already has a financial review draft; voided drafts remain auditable")
     # Reserve financial *proposal* limits; does not post an actual credit.
     prior_totals = db.session.execute(
         db.select(
