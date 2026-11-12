@@ -74,7 +74,15 @@ def main():
             errors = []
             page.on("pageerror", lambda e: errors.append(str(e)))
             page.goto("http://127.0.0.1:8765/app")
-            page.get_by_label("ชื่อผู้ใช้", exact=True).fill("ui-test-owner")
+            login_username = page.get_by_label("ชื่อผู้ใช้", exact=True)
+            try:
+                login_username.wait_for()
+            except Exception as error:
+                root_text = page.locator("#root").inner_text()
+                raise AssertionError(
+                    f"login form did not render; page errors={errors!r}; root text={root_text!r}"
+                ) from error
+            login_username.fill("ui-test-owner")
             page.get_by_label("รหัสผ่าน", exact=True).fill("synthetic-ui-password")
             page.get_by_role("button", name="เข้าสู่ระบบ", exact=True).click()
             page.get_by_role("button", name="เมนูทั้งหมด", exact=True).click()
