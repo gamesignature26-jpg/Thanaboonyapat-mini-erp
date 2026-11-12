@@ -137,7 +137,7 @@ def test_eligible_list_filters_and_private_print(client, seeded, app):
     assert "ใบวางบิลรวม (ร่าง)" in html
     assert "Synthetic customer" in html
     assert "<img src=x onerror=alert(1)>" not in html
-    warehouse = login(client, "warehouse")
+    login(client, "warehouse")
     assert client.get(url).status_code == 403
 
 
