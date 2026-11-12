@@ -182,7 +182,7 @@ def main():
             page.get_by_role("button", name="บันทึกซัพพลายเออร์", exact=True).click()
             page.locator(
                 '#purchase-form select[name="supplier_id"] option', has_text="Synthetic Water Supplier"
-            ).wait_for()
+            ).wait_for(state="attached")
             page.locator('#purchase-add-form select[name="product_id"]').select_option(index=1)
             page.locator('#purchase-add-form input[name="quantity"]').fill("3")
             page.locator('#purchase-add-form input[name="unit_cost"]').fill("42.50")
