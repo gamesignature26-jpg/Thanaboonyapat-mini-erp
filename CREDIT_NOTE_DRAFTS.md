@@ -41,4 +41,4 @@ No Sale, Payment, Product, StockMovement, IssuedDocument, receivables posting or
 
 ## Schema and tests
 
-Migration `bd8c1a770e21_credit_note_drafts.py` adds only one new `credit_note_draft` table. Its downgrade irreversibly drops the draft records; run downgrade only in disposable CI databases. CI covers migration upgrade/check/downgrade/upgrade, synthetic Python tests in `tests/test_credit_note_drafts.py`, and mobile browser create/print flow. The staging database has **not** been migrated.
+Migration `bd8c1a770e21_credit_note_drafts.py` adds only one new `credit_note_draft` table. Its downgrade irreversibly drops the draft records; run downgrade only in disposable CI databases. CI covers migration upgrade/check/downgrade/upgrade, synthetic Python tests in `tests/test_credit_note_drafts.py`, and mobile browser draft-creation flow. The printable endpoint is covered by the Python integration test; physical printing was not tested. The staging database has **not** been migrated.
