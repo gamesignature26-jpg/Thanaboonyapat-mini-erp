@@ -45,7 +45,7 @@ def test_draft_purchase_is_immutable_and_has_no_stock_or_financial_side_effects(
     sid = supplier(client, token)
     made = post(client, token, "/api/purchases", purchase(sid, pid))
     assert made.status_code == 201
-    row = client.get(f'/api/purchases/{made.json["id"]}').json
+    row = client.get(f"/api/purchases/{made.json['id']}").json
     assert row["number"] == "PO-DRAFT-000001"
     assert row["status"] == "draft"
     assert row["subtotal_cost"] == "166.00"
@@ -128,7 +128,7 @@ def test_purchase_list_page_and_roles(seeded, client):
         assert post(client, token, "/api/purchases", purchase(sid, pid, key)).status_code == 201
     first = client.get("/api/purchases?limit=1").json
     assert len(first["items"]) == 1 and first["next_before"] is not None
-    next_page = client.get(f'/api/purchases?limit=1&before={first["next_before"]}').json
+    next_page = client.get(f"/api/purchases?limit=1&before={first['next_before']}").json
     assert next_page["items"][0]["id"] != first["items"][0]["id"]
     assert client.get("/api/purchases?limit=0").status_code == 400
     assert client.get("/api/purchases?before=foo").status_code == 400
