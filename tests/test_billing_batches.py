@@ -62,7 +62,9 @@ def test_batch_snapshots_and_live_balance_do_not_double_receivables(client, seed
         assert db.session.get(Product, product_id).stock == 7
         assert db.session.scalar(db.select(Payment.id)) is None
         assert db.session.scalar(db.select(db.func.count(StockMovement.id))) == 3
-    received = post(client, token, f"/sales/{first}/payments", {"amount": "50.00", "reference": "synthetic-bill-pay-001"})
+    received = post(
+        client, token, f"/sales/{first}/payments", {"amount": "50.00", "reference": "synthetic-bill-pay-001"}
+    )
     assert received.status_code == 201
     after = client.get(detail_url).json
     assert after["snapshot_total"] == "321.00"
@@ -76,7 +78,12 @@ def test_batch_rejects_other_customer_paid_sales_duplicates_and_invalid_keys(cli
     other = post(client, token, "/customers", {"name": "Other synthetic", "address": "Other"}).json["id"]
     s1 = sale(client, token, customer_id, product_id)
     s2 = sale(client, token, other, product_id)
-    assert post(client, token, f"/sales/{s1}/payments", {"amount": "107.00", "reference": "synthetic-paid-001"}).status_code == 201
+    assert (
+        post(
+            client, token, f"/sales/{s1}/payments", {"amount": "107.00", "reference": "synthetic-paid-001"}
+        ).status_code
+        == 201
+    )
     invalid = [
         batch(customer_id, [s2]),
         batch(customer_id, [s1]),
