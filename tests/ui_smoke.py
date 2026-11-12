@@ -219,6 +219,7 @@ def main():
             page.get_by_role("heading", name="หลักฐานต้นทุนสินค้า (ยังไม่ใช่กำไรขั้นต้น)").wait_for()
             page.get_by_text("127.50", exact=False).first.wait_for()
             page.get_by_text("ยังคำนวณต้นทุนขายและกำไรขั้นต้นไม่ได้", exact=False).wait_for()
+            page.get_by_role("button", name="เมนูทั้งหมด", exact=True).click()
             page.get_by_role("button", name="รายสัปดาห์ / ค่าแรง / หลักฐาน", exact=True).click()
             page.get_by_role("heading", name="ยืนยันอีเมล", exact=True).wait_for()
             page.get_by_role("button", name="รายสัปดาห์ / ค่าแรง", exact=True).click()
