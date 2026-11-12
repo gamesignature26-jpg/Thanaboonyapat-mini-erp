@@ -123,6 +123,20 @@ def main():
             billing.value.get_by_text("ใบวางบิลตัวอย่าง", exact=False).first.wait_for()
             billing.value.get_by_text("ไม่ใช่ใบกำกับภาษี", exact=False).first.wait_for()
             billing.value.close()
+            page.get_by_role("button", name="ใบวางบิลรวม", exact=True).click()
+            page.locator('#billing-customer-form select[name="customer_id"]').select_option(
+                label="Synthetic POS customer"
+            )
+            page.get_by_role("button", name="โหลดบิลค้างชำระ", exact=True).click()
+            page.locator('#billing-create-form input[name="sale_ids"]').first.check()
+            page.get_by_role("button", name="บันทึกใบวางบิลรวม (ร่าง)", exact=True).click()
+            page.locator("#billing-batch-detail").get_by_text("BATCH-DRAFT-000001", exact=False).wait_for()
+            with page.expect_popup() as combined:
+                page.get_by_role("link", name="พิมพ์ใบวางบิลรวมร่าง", exact=True).click()
+            combined.value.get_by_text("ใบวางบิลรวม (ร่าง)", exact=False).first.wait_for()
+            combined.value.get_by_text("ไม่ใช่ใบกำกับภาษี", exact=False).first.wait_for()
+            combined.value.close()
+            page.get_by_role("button", name="บิลขาย / ลูกหนี้", exact=True).click()
             page.get_by_role("button", name="รับชำระ", exact=True).click()
             page.get_by_role("button", name="บันทึกรับชำระ", exact=True).click()
             page.get_by_role("button", name="ออกใบเสร็จร่าง", exact=True).click()
