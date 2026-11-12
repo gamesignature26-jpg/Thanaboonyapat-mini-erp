@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <title>{{ draft.number }} — เฉพาะตรวจสอบ</title>
+</head>
+<body>
+  <h1>เอกสารตรวจสอบยอดลดหนี้ (ร่าง)</h1>
+  <p><strong>{{ draft.number }}</strong> — ไม่ใช่ใบลดหนี้ภาษี ไม่ใช่หลักฐานคืนเงิน</p>
+  <p>เลขบิลขาย: {{ draft.sale_id }} | เลขรายการคืนที่คลังตรวจรับ: {{ draft.return_id }}</p>
+  <p>ลูกค้า: {{ draft.customer_name }} | เลขผู้เสียภาษี: {{ draft.customer_tax_id or "—" }}</p>
+  <p>ที่อยู่: {{ draft.customer_address }}</p>
+  <p>เหตุผล: {{ draft.reason }} | สถานะ: {{ draft.status }}</p>
+  <h2>จำนวนเงินที่เสนอให้ฝ่ายบัญชีตรวจสอบ</h2>
+  <table border="1" cellpadding="6" cellspacing="0">
+    <thead><tr><th>รายการ</th><th>จำนวนเงิน (บาท)</th></tr></thead>
+    <tbody>
+      <tr><td>ฐานก่อน VAT ที่เสนอ</td><td>{{ draft.amount_ex_vat }}</td></tr>
+      <tr><td>VAT ที่เสนอ</td><td>{{ draft.vat_amount }}</td></tr>
+      <tr><td>รวมยอดที่เสนอ</td><td>{{ draft.credit_total }}</td></tr>
+    </tbody>
+  </table>
+  <h2>รายการคืนที่รับเข้าคลัง</h2>
+  <table border="1" cellpadding="6" cellspacing="0">
+    <thead><tr><th>SKU</th><th>สินค้า</th><th>จำนวนคืน</th></tr></thead>
+    <tbody>
+      {% for line in draft.returned_lines %}
+      <tr><td>{{ line.sku }}</td><td>{{ line.name }}</td><td>{{ line.quantity }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p>ยอดขายเดิม: {{ draft.original_sale_total }} | จ่ายแล้ว ณ วันบันทึกร่าง: {{ draft.original_sale_paid }}</p>
+  <p>ยอดค้าง ณ ขณะเปิดเอกสาร: {{ draft.current_sale_balance }}</p>
+  <p><strong>เอกสารนี้ไม่ปรับลดลูกหนี้ ไม่คืนเงิน ไม่แก้ VAT และไม่เปลี่ยนสต็อก</strong></p>
+  <p>ต้องตรวจสอบเหตุผล ฐาน VAT และการกระทบยอดรับชำระโดยผู้รับผิดชอบก่อนออกเอกสารตามกฎหมาย</p>
+</body>
+</html>
