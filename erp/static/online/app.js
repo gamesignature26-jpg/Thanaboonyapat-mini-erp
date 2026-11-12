@@ -425,6 +425,38 @@ async function send(form){if(state.busy)return;state.busy=true;const submit=form
  }
  else if(id==='pos-form')await confirmSale('pos',form);
  else if(id==='wh-form')await confirmSale('wholesale',form);
+ else if(id==='supplier-form'){
+  await api('/api/suppliers',{method:'POST',body:{name:v.name,tax_id:v.tax_id||null,address:v.address||''}});
+  warn('บันทึกซัพพลายเออร์แล้ว');await refresh();
+ }
+ else if(id==='purchase-add-form'){
+  const product=state.products.find(x=>x.id===Number(v.product_id));const qty=Number(v.quantity);
+  if(!product||!Number.isInteger(qty)||qty<1||qty>1000000)throw Error('กรุณาเลือกสินค้าและจำนวนที่ถูกต้อง');
+  if(!/^\d{1,9}(?:\.\d{1,2})?$/.test(v.unit_cost)||Number(v.unit_cost)<=0)throw Error('กรอกต้นทุนต่อหน่วยเป็นบาท ทศนิยมไม่เกิน 2 ตำแหน่ง');
+  if(state.purchaseLines.length>=100||state.purchaseLines.some(x=>x.product_id===product.id))throw Error('มีสินค้านี้แล้วหรือเกิน 100 รายการ');
+  state.purchaseLines.push({product_id:product.id,quantity:qty,unit_cost:Number(v.unit_cost).toFixed(2)});render();
+ }
+ else if(id==='purchase-form'){
+  if(!state.purchaseLines.length)throw Error('กรุณาเพิ่มรายการสินค้า');
+  const body={supplier_id:Number(v.supplier_id),lines:state.purchaseLines.map(x=>({...x})),note:v.note||''};
+  const bytes=new TextEncoder().encode(JSON.stringify(body));
+  const hash=[...new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))].map(b=>b.toString(16).padStart(2,'0')).join('');
+  const slot='tb-pending-purchase-v1';
+  let pending=null;try{pending=JSON.parse(sessionStorage.getItem(slot)||'null');}catch(_){/* ignore corrupt retry metadata */}
+  const request_key=pending?.hash===hash?pending.key:uuid();
+  sessionStorage.setItem(slot,JSON.stringify({hash,key:request_key}));
+  const result=await api('/api/purchases',{method:'POST',body:{...body,request_key}});
+  sessionStorage.removeItem(slot);
+  state.purchaseLines=[];state.purchaseSelected=await api(`/api/purchases/${result.id}`);
+  warn(`สร้างใบสั่งซื้อร่าง ${result.number} แล้ว`);await refresh();
+ }
+ else if(id==='purchase-receive-form'){
+  if(!state.purchaseSelected)throw Error('กรุณาเลือกใบสั่งซื้อ');
+  const id=state.purchaseSelected.id;
+  await api(`/api/purchases/${id}/receive`,{method:'POST',body:{receipt_note:v.receipt_note}});
+  state.purchaseSelected=await api(`/api/purchases/${id}`);
+  warn('ตรวจรับสินค้าและเพิ่มสต็อกครั้งเดียวเรียบร้อย');await refresh();
+ }
  else if(id==='return-add-form'){
   const line=state.returnEligible?.lines.find(x=>x.sale_line_id===Number(v.sale_line_id));
   const qty=Number(v.quantity);
@@ -537,6 +569,12 @@ document.addEventListener('click',async event=>{
   state.quoteSelected=updated;warn('อัปเดตสถานะใบเสนอราคาแล้ว');await refresh();return;
  }
  if(btn.dataset.quoteDetail){state.quoteSelected=await api(`/api/quotations/${Number(btn.dataset.quoteDetail)}`);render();return;}
+  if(btn.hasAttribute('data-purchase-remove')){state.purchaseLines.splice(Number(btn.dataset.purchaseRemove),1);render();return;}
+  if(btn.dataset.purchaseDetail){state.purchaseSelected=await api(`/api/purchases/${Number(btn.dataset.purchaseDetail)}`);render();return;}
+  if(btn.dataset.purchaseMore&&state.purchaseCursor){
+   const page=await api(`/api/purchases?before=${state.purchaseCursor}`);
+   state.purchases.push(...page.items);state.purchaseCursor=page.next_before;render();return;
+  }
   if(btn.dataset.returnLoad){
    const saleId=Number($('return-sale-id')?.value);
    if(!Number.isInteger(saleId)||saleId<1)throw Error('กรุณาระบุเลขบิลขาย');
