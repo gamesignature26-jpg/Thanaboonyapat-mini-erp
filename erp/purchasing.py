@@ -212,9 +212,7 @@ def create_purchase():
         if cost <= 0:
             abort(400, "Unit cost must be positive")
         costs[product_id] = cost
-    products = list(
-        db.session.scalars(db.select(Product).where(Product.id.in_(quantities)).order_by(Product.id))
-    )
+    products = list(db.session.scalars(db.select(Product).where(Product.id.in_(quantities)).order_by(Product.id)))
     if len(products) != len(quantities):
         abort(404, "Product not found")
     subtotal = sum((costs[p.id] * quantities[p.id] for p in products), Decimal("0.00"))
@@ -278,9 +276,7 @@ def receive_purchase(purchase_id):
     if set(body) != {"receipt_note"}:
         abort(400, "Expected receipt_note")
     receipt_note = text(body, "receipt_note", 600)
-    row = db.session.scalar(
-        db.select(PurchaseOrder).where(PurchaseOrder.id == purchase_id).with_for_update()
-    )
+    row = db.session.scalar(db.select(PurchaseOrder).where(PurchaseOrder.id == purchase_id).with_for_update())
     if row is None:
         abort(404)
     if row.status == "received":
