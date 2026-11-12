@@ -14,7 +14,7 @@
 <table>
 <thead><tr><th>เลขบิลขาย</th><th>วันที่ขาย</th><th>ยอดขาย</th><th>ค้างชำระ ณ วันร่าง</th><th>ค้างชำระปัจจุบัน</th></tr></thead>
 <tbody>
-{% for item in batch.items %}
+{% for item in batch['items'] %}
 <tr><td>#{{ item.sale_id }}</td><td>{{ item.sale_date }}</td><td>{{ item.sale_total }}</td>
 <td>{{ item.outstanding_at_creation }}</td><td>{{ item.outstanding_now }}</td></tr>
 {% endfor %}
