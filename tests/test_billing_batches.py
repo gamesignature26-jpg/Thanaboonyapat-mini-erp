@@ -1,6 +1,8 @@
 """Multi-sale billing DRAFT tests; never mutate sales, payments, or tax documents."""
 
+import pytest
 from conftest import login, post
+from test_concurrency import concurrent_requests
 
 from erp.models import Customer, Payment, Product, Sale, StockMovement, db
 
@@ -166,3 +168,25 @@ def test_batch_list_pagination_and_void_permissions(client, seeded):
         post(client, sales_token, f"/api/billing-batches/{made[0].json['id']}/void", {"reason": "No"}).status_code
         == 403
     )
+
+
+def test_postgres_concurrent_batch_claims_do_not_duplicate_one_sale(seeded, client, app):
+    if not app.config["SQLALCHEMY_DATABASE_URI"].startswith("postgresql"):
+        pytest.skip("PostgreSQL row locking required")
+    token, product_id, customer_id = seeded
+    sale_id = sale(client, token, customer_id, product_id)
+    statuses = concurrent_requests(
+        app,
+        "/api/billing-batches",
+        [
+            batch(customer_id, [sale_id], "synthetic-concurrent-billing-00001"),
+            batch(customer_id, [sale_id], "synthetic-concurrent-billing-00002"),
+        ],
+    )
+    assert statuses == [201, 409]
+    with app.app_context():
+        from erp.billing_batches import BillingBatch, BillingBatchLine
+
+        assert db.session.scalar(db.select(db.func.count(BillingBatch.id))) == 1
+        assert db.session.scalar(db.select(db.func.count(BillingBatchLine.id))) == 1
+        assert db.session.get(Sale, sale_id).paid == 0
