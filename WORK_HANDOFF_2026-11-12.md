@@ -4,8 +4,8 @@ Updated: 2026-11-12 (Asia/Bangkok)
 ## Source of truth
 - Repo: https://github.com/gamesignature26-jpg/Thanaboonyapat-mini-erp
 - Current development branch: `feature/flow-loyverse-additions-20261112`
-- Last fully validated return-intake code commit: `7e968f8c649d032caded9ac9caabe6a85f9ffb79`
-- Passing GitHub Actions (code + browser): https://github.com/gamesignature26-jpg/Thanaboonyapat-mini-erp/actions/runs/43185938399
+- Last fully validated purchasing code commit: `27d0fba05ae6c3be6f3f2603f1a76125280dd4b4`
+- Passing GitHub Actions (code + PostgreSQL + browser): https://github.com/gamesignature26-jpg/Thanaboonyapat-mini-erp/actions/runs/43206103948
 - Original branch kept unchanged: `feature/thanabunyapat-online`; production branch `main` must not be modified or merged.
 - Previous README/HANDOFF.md may describe an older MVP; inspect actual branch code before deciding whether features are absent.
 
@@ -35,13 +35,17 @@ Continue adding missing FlowAccount-like accounting/document functions and Loyve
 - Added `erp/return_intake.py`, migration `migrations/versions/8ac4b7e0d221_return_intake.py`, `erp/templates/return_intake_print.html`, return menu/actions in `erp/static/online/app.js`, test suite `tests/test_return_intake.py` and mobile UI smoke. Return drafts are idempotent, warehouse-only inspection records condition/actor, only resellable returns restock with a positive StockMovement; overlapping returns cannot exceed sold quantities.
 - **This is NOT a tax credit note/refund**. Sale.total, Sale.paid, Payment, IssuedDocument and outstanding receivables are not modified. Damaged returns are recorded but not restocked. Read `RETURN_INTAKE.md` for exact contract and limits.
 - Latest full CI PASS for code including return print/mobile flow: https://github.com/gamesignature26-jpg/Thanaboonyapat-mini-erp/actions/runs/43185938399 (SHA `7e968f8c649d032caded9ac9caabe6a85f9ffb79`). Documentation-only follow-up commits may have newer CI checks.
-- Next: legally reviewed return financial adjustments and tax credit-note drafts, purchasing/suppliers and true COGS, formal multi-sale billing notes, real quote revisions/approvals. Never confuse physical return intake with a credit note.
+- Added `erp/purchasing.py` and `migrations/versions/9b2a11e4d508_purchasing.py` with separate Supplier, PurchaseOrder and PurchaseOrderLine data. Supplier registration and idempotent purchase drafts (snapshot quantity, SKU/name and ex-VAT unit cost) **do not** move stock. Warehouse-only full physical receiving increments stock with StockMovement audit in one transaction, rejects conflicting retries, and locks purchase/product rows in PostgreSQL.
+- Added `/app` purchasing UI, new menus and restricted roles in `erp/static/online/app.js`; purchase/create/detail/receive endpoints, synthetic `tests/test_purchasing.py` including concurrent receiving protection, plus Playwright browser flow in `tests/ui_smoke.py`. Detailed contracts: `PURCHASING.md`.
+- Latest full CI green including migration verification, Python/Postgres, concurrent receipts and browser: https://github.com/gamesignature26-jpg/Thanaboonyapat-mini-erp/actions/runs/43206103948 (code SHA `27d0fba05ae6c3be6f3f2603f1a76125280dd4b4`).
+- This is **not yet cost of goods sold**: purchase costs are ex-purchase-VAT snapshots only. Historical stock and sales lack reliable opening/inventory costs; no supplier payable, supplier payment, purchasing tax entry, weighted-average/FIFO inventory valuation, or gross/net profit can be inferred.
+- Next: opening stock valuation and cost basis, cost snapshot on sale, formal multi-sale billing notes, legal-review-only financial credit notes, real quote revisions/approvals. Never confuse physical return intake with a tax credit note.
 
 ## Immediate next work (in priority order)
 1. Re-audit actual routes, models, templates, JS and tests to prevent duplicate features and identify incomplete implementations.
 2. Review the new **staff-recorded** quote acceptance and conversion code (already implemented) and add formal quote revisions/customer acceptance evidence and multi-sale billing-note issuance only after document/business rules are approved. Never bypass stock/price checks when converting a quote. Do **not** misuse `IssuedDocument` tax invoice/receipt semantics. Draft numbers must be separate from legally issued document numbers. New states must have explicit validation, auth and immutable snapshots where appropriate.
 3. Physical return draft/inspection with guarded resellable stock restock is already implemented. Next add a **separately approved financial credit-note draft** with review of Thai tax rules, VAT mode, payment reconciliation and receivables; do not reverse financial ledgers automatically when warehouse receives goods.
-4. Add purchasing/suppliers, stock receiving, cost/COGS support and per-order gross margin when data model permits. Never label sales minus recorded expenses as net profit.
+4. Supplier purchase drafts and one-time full physical stock receiving **are implemented**. Next: define safe opening stock costs, purchase-lot valuation or weighted average, cost-at-sale snapshot, return-cost treatment and a properly labeled gross-profit report. Never treat recorded purchase costs alone or sales minus expenses as net profit.
 5. Improve POS customer lookup selection/search, customer history paging, and outstanding report paging; fix gaps without removing old UI.
 6. Test receipt and 58mm Bluetooth integration on actual supported hardware (BLE vs classic SPP vs browser/platform compatibility). Do not claim universal Web Bluetooth or actual print success based only on simulation.
 7. Document route capacity as <=550 packs per truck only after validating units/weights/vehicle capacity and delivery constraints.
