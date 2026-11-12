@@ -3,7 +3,7 @@
 'use strict';
 const root = document.getElementById('root');
 const toast = document.getElementById('toast');
-const state = {user:null,csrf:null,view:'dashboard',products:[],customers:[],sales:[],orders:[],expenses:[],users:[],summary:null,cart:new Map(),wh:[],quoteLines:[],quotations:[],quoteSelected:null,returns:[],returnsCursor:null,suppliers:[],purchases:[],purchaseCursor:null,purchaseLines:[],purchaseSelected:null,billingBatches:[],billingCursor:null,billingSelected:null,billingCustomerId:null,billingEligible:[],billingEligibleCursor:null,returnEligible:null,returnLines:[],returnSelected:null,returnReason:'',vatRate:7,busy:false,company:{},specialPrices:[],selectedCustomer:0,imageIds:[],posCustomer:0,posPrices:new Map(),posPriceReady:false,posMethod:"cash",customerLookupResults:null,customerHistory:null,salesOutstanding:false,salesCursor:null,search:{},posVatMode:'exclusive',lastSale:null};
+const state = {user:null,csrf:null,view:'dashboard',products:[],customers:[],sales:[],orders:[],expenses:[],users:[],summary:null,cart:new Map(),wh:[],quoteLines:[],quotations:[],quoteSelected:null,returns:[],returnsCursor:null,suppliers:[],purchases:[],purchaseCursor:null,purchaseLines:[],purchaseSelected:null,costEvidence:null,billingBatches:[],billingCursor:null,billingSelected:null,billingCustomerId:null,billingEligible:[],billingEligibleCursor:null,returnEligible:null,returnLines:[],returnSelected:null,returnReason:'',vatRate:7,busy:false,company:{},specialPrices:[],selectedCustomer:0,imageIds:[],posCustomer:0,posPrices:new Map(),posPriceReady:false,posMethod:"cash",customerLookupResults:null,customerHistory:null,salesOutstanding:false,salesCursor:null,search:{},posVatMode:'exclusive',lastSale:null};
 const labels = {dashboard:'ภาพรวมธุรกิจ',pos:'ขายหน้าร้าน POS',wholesale:'ขายส่ง / จัดส่ง',sales:'บิลขาย / ลูกหนี้',billing_batches:'ใบวางบิลรวม',quotations:'ใบเสนอราคา',returns:'รับคืนสินค้า',purchases:'จัดซื้อและรับสินค้า',inventory:'สินค้าและสต๊อก',customers:'ลูกค้า',expenses:'ค่าใช้จ่าย',reports:'รายงาน',users:'ผู้ใช้งาน',prices:'ราคาพิเศษ',settings:'ตั้งค่าบริษัท'};
 const roleLabels = {admin:'เจ้าของระบบ',sales:'พนักงานขาย',warehouse:'พนักงานคลัง',accountant:'พนักงานบัญชี'};
 const navGroups = [
@@ -96,6 +96,9 @@ async function refresh(){
   if(needs==='purchases'){
    const [vendors,orders]=await Promise.all([api('/api/suppliers'),api('/api/purchases')]);
    state.suppliers=vendors.items;state.purchases=orders.items;state.purchaseCursor=orders.next_before;
+  }
+  if(needs==='reports'&&['admin','accountant'].includes(state.user.role)){
+   state.costEvidence=await api('/api/reports/cost-evidence?limit=50');
   }
   if(needs==='expenses')state.expenses=(await api('/api/online/expenses')).items;
   if(needs==='users'&&state.user.role==='admin')state.users=(await api('/users')).items;
@@ -306,7 +309,16 @@ function customers(){
  <section class="card"><h2>เพิ่มลูกค้า</h2><form id="customer-form">${field('ชื่อร้านค้า / ลูกค้า','name','text','','required maxlength="200"')}${field('ที่อยู่','address','text','','required maxlength="1000"')}${field('เลขผู้เสียภาษี 13 หลัก (ถ้ามี)','tax_id','text','','pattern="[0-9]{13}" maxlength="13"')}<button class="btn">บันทึกลูกค้า</button></form></section></div>`;
 }
 function expenses(){return `<div class="grid g2"><div class="card"><h2>บันทึกค่าใช้จ่าย</h2><p>ใช้ติดตามรายจ่าย ไม่ใช่ลงบัญชีคู่</p><form id="expense-form">${field('หมวดหมู่','category','text','ขนส่ง','required maxlength="80"')}${field('รายละเอียด','description','text','','required maxlength="250"')}${field('จำนวนเงิน (บาท)','amount','number','','min="0.01" step="0.01" required')}<div class="field"><label>ชำระโดย</label><select name="method">${opt('cash','เงินสด')}${opt('transfer','โอนเงิน')}</select></div><button class="btn">บันทึกรายจ่าย</button></form></div><div class="card"><h2>รายจ่ายล่าสุด</h2><div class="tablewrap"><table><tbody>${state.expenses.map(x=>`<tr><td>#${x.id} ${esc(x.category)}<div class="muted">${esc(x.description)}</div><button class="btn secondary slim" data-op-expense="${x.id}">แนบรูปใบเสร็จ</button></td><td class="num">${fmt(x.amount)}</td></tr>`).join('')}</tbody></table></div></div></div>`;}
-function reports(){const s=state.summary||{};return `${summary()}<div class="card"><h2>รายงานการจัดส่งและค่าใช้จ่าย</h2><div class="grid g2">${card('รอส่งสินค้า',String(s.pending_delivery||0),'สถานะยังไม่สิ้นสุด')}${card('รายจ่ายที่บันทึก',fmt(s.expenses_total),'ไม่รวมต้นทุนสินค้าขาย')}</div><div class="alert">ยังไม่มีระบบต้นทุนสินค้า กำไรขาดทุนบัญชีคู่ งบการเงิน และรายงานภาษีที่ผ่านการรับรอง ห้ามนำยอดรวมนี้ไปอ้างว่าเป็นกำไรสุทธิ</div></div>`;}
+function reports(){
+ const s=state.summary||{};const e=state.costEvidence||{};
+ const rows=(e.items||[]).map(x=>`<tr><td>${esc(x.sku)}<div class="muted">${esc(x.name)}</div></td><td class="num">${x.stock_units}</td><td class="num">${x.received_purchase_units}</td><td class="num">${fmt(x.received_purchase_cost_ex_vat)}</td><td>${x.stock_movement_reconciles?'ยอดตรง':'ต้องตรวจสอบ'}</td></tr>`).join('');
+ return `${summary()}<div class="card"><h2>รายงานการจัดส่งและค่าใช้จ่าย</h2><div class="grid g2">${card('รอส่งสินค้า',String(s.pending_delivery||0),'สถานะยังไม่สิ้นสุด')}${card('รายจ่ายที่บันทึก',fmt(s.expenses_total),'ไม่รวมต้นทุนสินค้าขาย')}</div></div>
+ <section class="card" id="cost-evidence-report"><h2>หลักฐานต้นทุนสินค้า (ยังไม่ใช่กำไรขั้นต้น)</h2>
+ <div class="grid g2">${card('ยอดซื้อที่รับจริง (ก่อน VAT)',fmt(e.received_purchase_cost_ex_vat),'หลักฐานราคาจากใบรับสินค้าเท่านั้น')}${card('รายได้ขายก่อน VAT',fmt(e.sales_revenue_ex_vat),'รวมยอดขายเก่าที่ยังไม่มีต้นทุน')}</div>
+ <p class="alert">ยังคำนวณต้นทุนขายและกำไรขั้นต้นไม่ได้: สต็อกเดิมไม่มีต้นทุนยกมาที่รับรองแล้ว และยังไม่บันทึกต้นทุน ณ วันขาย การขายและการรับคืนสินค้า</p>
+ <p class="small-note">${esc(e.notice||'')}</p><div class="tablewrap"><table><thead><tr><th>สินค้า</th><th>คงเหลือ</th><th>ซื้อเข้าที่มีราคา</th><th>ราคาซื้อสะสมก่อน VAT</th><th>เทียบยอดเคลื่อนไหว</th></tr></thead><tbody>${rows||'<tr><td colspan="5">ไม่มีข้อมูลสินค้า</td></tr>'}</tbody></table></div>
+ ${e.next_after?'<button type="button" class="btn secondary" data-cost-more="1">แสดงสินค้าเพิ่มเติม</button>':''}</section>`;
+}
 function users(){
  if(state.user.role!=='admin')return '<div class="alert">ไม่มีสิทธิ์เข้าถึง</div>';
  const rows=state.users.map(u=>`<tr><td>${esc(u.username)}</td><td>${esc(roleLabels[u.role]||u.role)}</td><td>${u.active?'เปิดใช้':'ปิดใช้'}</td><td>${u.role==='admin'?'เจ้าของระบบ':`<button class="btn secondary slim" data-staff="${u.id}">แก้สิทธิ์</button>`} <button class="btn secondary slim" data-reset="${u.id}">ตั้งรหัสใหม่</button></td></tr>`).join('');
@@ -605,6 +617,10 @@ document.addEventListener('click',async event=>{
   if(btn.dataset.customerServerSearch){const term=state.search.customers||'';const page=await api('/api/customers/lookup?q='+encodeURIComponent(term)+'&limit=100');state.customerLookupResults=page.items;state.customerHistory=null;render();if(page.next_after)warn('แสดง 100 รายชื่อแรก กรุณาระบุคำค้นให้แคบลง');return;}
   if(btn.dataset.customerClear){state.customerLookupResults=null;state.customerHistory=null;state.search.customers='';render();return;}
   if(btn.dataset.customerHistory){state.customerHistory=await api(`/api/customers/${Number(btn.dataset.customerHistory)}/history`);render();$('customer-purchase-history')?.focus({preventScroll:true});return;}
+ if(btn.dataset.costMore&&state.costEvidence?.next_after){
+  const page=await api('/api/reports/cost-evidence?limit=50&after='+state.costEvidence.next_after);
+  state.costEvidence.items.push(...page.items);state.costEvidence.next_after=page.next_after;render();return;
+ }
  if(btn.dataset.billingDetail){state.billingSelected=await api(`/api/billing-batches/${Number(btn.dataset.billingDetail)}`);render();return;}
  if(btn.dataset.billingMore&&state.billingCursor){
   const page=await api(`/api/billing-batches?before=${state.billingCursor}`);
