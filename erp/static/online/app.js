@@ -3,7 +3,7 @@
 'use strict';
 const root = document.getElementById('root');
 const toast = document.getElementById('toast');
-const state = {user:null,csrf:null,view:'dashboard',products:[],customers:[],sales:[],orders:[],expenses:[],users:[],summary:null,cart:new Map(),wh:[],quoteLines:[],quotations:[],quoteSelected:null,returns:[],returnsCursor:null,suppliers:[],purchases:[],purchaseCursor:null,purchaseLines:[],purchaseSelected:null,costEvidence:null,billingBatches:[],billingCursor:null,billingSelected:null,creditDrafts:[],creditCursor:null,creditSelected:null,billingCustomerId:null,billingEligible:[],billingEligibleCursor:null,returnEligible:null,returnLines:[],returnSelected:null,returnReason:'',vatRate:7,busy:false,company:{},specialPrices:[],selectedCustomer:0,imageIds:[],posCustomer:0,posPrices:new Map(),posPriceReady:false,posMethod:"cash",customerLookupResults:null,customerHistory:null,salesOutstanding:false,salesCursor:null,search:{},posVatMode:'exclusive',lastSale:null};
+const state = {user:null,csrf:null,view:'dashboard',products:[],customers:[],sales:[],orders:[],expenses:[],users:[],summary:null,cart:new Map(),wh:[],quoteLines:[],quotations:[],quoteSelected:null,returns:[],returnsCursor:null,suppliers:[],purchases:[],purchaseCursor:null,purchaseLines:[],purchaseSelected:null,costEvidence:null,receivablesData:null,billingBatches:[],billingCursor:null,billingSelected:null,creditDrafts:[],creditCursor:null,creditSelected:null,billingCustomerId:null,billingEligible:[],billingEligibleCursor:null,returnEligible:null,returnLines:[],returnSelected:null,returnReason:'',vatRate:7,busy:false,company:{},specialPrices:[],selectedCustomer:0,imageIds:[],posCustomer:0,posPrices:new Map(),posPriceReady:false,posMethod:"cash",customerLookupResults:null,customerHistory:null,salesOutstanding:false,salesCursor:null,search:{},posVatMode:'exclusive',lastSale:null};
 const labels = {dashboard:'ภาพรวมธุรกิจ',pos:'ขายหน้าร้าน POS',wholesale:'ขายส่ง / จัดส่ง',sales:'บิลขาย / ลูกหนี้',billing_batches:'ใบวางบิลรวม',credit_drafts:'ใบลดหนี้ร่าง',quotations:'ใบเสนอราคา',returns:'รับคืนสินค้า',purchases:'จัดซื้อและรับสินค้า',inventory:'สินค้าและสต๊อก',customers:'ลูกค้า',expenses:'ค่าใช้จ่าย',reports:'รายงาน',users:'ผู้ใช้งาน',prices:'ราคาพิเศษ',settings:'ตั้งค่าบริษัท'};
 const roleLabels = {admin:'เจ้าของระบบ',sales:'พนักงานขาย',warehouse:'พนักงานคลัง',accountant:'พนักงานบัญชี'};
 const navGroups = [
@@ -102,7 +102,10 @@ async function refresh(){
    state.suppliers=vendors.items;state.purchases=orders.items;state.purchaseCursor=orders.next_before;
   }
   if(needs==='reports'&&['admin','accountant'].includes(state.user.role)){
-   state.costEvidence=await api('/api/reports/cost-evidence?limit=50');
+   const [cost,receivables]=await Promise.all([
+    api('/api/reports/cost-evidence?limit=50'),api('/api/reports/receivables?limit=50')
+   ]);
+   state.costEvidence=cost;state.receivablesData=receivables;
   }
   if(needs==='expenses')state.expenses=(await api('/api/online/expenses')).items;
   if(needs==='users'&&state.user.role==='admin')state.users=(await api('/users')).items;
@@ -322,14 +325,18 @@ function creditDrafts(){
  ${d?`<section class="card" id="credit-draft-detail"><h2>รายละเอียด ${esc(d.number)}</h2><p>สถานะ ${esc(d.status)} · ลูกค้า ${esc(d.customer_name)} · บิล #${d.sale_id} · คืน #${d.return_id}</p><p>ฐานก่อน VAT ${fmt(d.amount_ex_vat)} + VAT ${fmt(d.vat_amount)} = <strong>${fmt(d.credit_total)}</strong></p><p>ค้างชำระปัจจุบัน ${fmt(d.current_sale_balance)} (ไม่มีการตัดยอด)</p><p>เหตุผล: ${esc(d.reason)}</p><a class="btn secondary slim" target="_blank" rel="noopener" href="/api/credit-note-drafts/${d.id}/print">พิมพ์เอกสารตรวจสอบร่าง</a>${d.status==='draft'?`<form id="credit-void-form">${field('เหตุผลการยกเลิกร่าง','reason','text','','required maxlength="600"')}<button class="btn secondary">ยกเลิกร่าง</button></form>`:''}</section>`:''}`;
 }
 function reports(){
- const s=state.summary||{};const e=state.costEvidence||{};
+ const s=state.summary||{};const e=state.costEvidence||{};const debts=state.receivablesData||{};
+ const debtorRows=(debts.items||[]).map(x=>`<tr><td>${esc(x.customer_name)}</td><td class="num">${x.unpaid_sales}</td><td class="num">${fmt(x.outstanding)}</td></tr>`).join('');
  const rows=(e.items||[]).map(x=>`<tr><td>${esc(x.sku)}<div class="muted">${esc(x.name)}</div></td><td class="num">${x.stock_units}</td><td class="num">${x.received_purchase_units}</td><td class="num">${fmt(x.received_purchase_cost_ex_vat)}</td><td>${x.stock_movement_reconciles?'ยอดตรง':'ต้องตรวจสอบ'}</td></tr>`).join('');
  return `${summary()}<div class="card"><h2>รายงานการจัดส่งและค่าใช้จ่าย</h2><div class="grid g2">${card('รอส่งสินค้า',String(s.pending_delivery||0),'สถานะยังไม่สิ้นสุด')}${card('รายจ่ายที่บันทึก',fmt(s.expenses_total),'ไม่รวมต้นทุนสินค้าขาย')}</div></div>
  <section class="card" id="cost-evidence-report"><h2>หลักฐานต้นทุนสินค้า (ยังไม่ใช่กำไรขั้นต้น)</h2>
  <div class="grid g2">${card('ยอดซื้อที่รับจริง (ก่อน VAT)',fmt(e.received_purchase_cost_ex_vat),'หลักฐานราคาจากใบรับสินค้าเท่านั้น')}${card('รายได้ขายก่อน VAT',fmt(e.sales_revenue_ex_vat),'รวมยอดขายเก่าที่ยังไม่มีต้นทุน')}</div>
  <p class="alert">ยังคำนวณต้นทุนขายและกำไรขั้นต้นไม่ได้: สต็อกเดิมไม่มีต้นทุนยกมาที่รับรองแล้ว และยังไม่บันทึกต้นทุน ณ วันขาย การขายและการรับคืนสินค้า</p>
  <p class="small-note">${esc(e.notice||'')}</p><div class="tablewrap"><table><thead><tr><th>สินค้า</th><th>คงเหลือ</th><th>ซื้อเข้าที่มีราคา</th><th>ราคาซื้อสะสมก่อน VAT</th><th>เทียบยอดเคลื่อนไหว</th></tr></thead><tbody>${rows||'<tr><td colspan="5">ไม่มีข้อมูลสินค้า</td></tr>'}</tbody></table></div>
- ${e.next_after?'<button type="button" class="btn secondary" data-cost-more="1">แสดงสินค้าเพิ่มเติม</button>':''}</section>`;
+ ${e.next_after?'<button type="button" class="btn secondary" data-cost-more="1">แสดงสินค้าเพิ่มเติม</button>':''}</section>
+ <section class="card"><h2>ลูกหนี้คงเหลือแยกรายลูกค้า</h2><p>รวมลูกหนี้ ${fmt(debts.total_outstanding)} · บิลค้าง ${debts.open_invoices||0} บิล (ยังไม่ใช่รายงานอายุหนี้)</p>
+ <div class="tablewrap"><table><thead><tr><th>ลูกค้า</th><th>บิลค้าง</th><th>ยอดค้าง (บาท)</th></tr></thead><tbody>${debtorRows||'<tr><td colspan="3">ไม่มียอดค้างชำระ</td></tr>'}</tbody></table></div>
+ ${debts.has_more?'<button type="button" class="btn secondary" data-receivables-more="1">แสดงลูกหนี้เพิ่มเติม</button>':''}</section>`;
 }
 function users(){
  if(state.user.role!=='admin')return '<div class="alert">ไม่มีสิทธิ์เข้าถึง</div>';
@@ -651,6 +658,13 @@ document.addEventListener('click',async event=>{
   if(btn.dataset.customerServerSearch){const term=state.search.customers||'';const page=await api('/api/customers/lookup?q='+encodeURIComponent(term)+'&limit=100');state.customerLookupResults=page.items;state.customerHistory=null;render();if(page.next_after)warn('แสดง 100 รายชื่อแรก กรุณาระบุคำค้นให้แคบลง');return;}
   if(btn.dataset.customerClear){state.customerLookupResults=null;state.customerHistory=null;state.search.customers='';render();return;}
   if(btn.dataset.customerHistory){state.customerHistory=await api(`/api/customers/${Number(btn.dataset.customerHistory)}/history`);render();$('customer-purchase-history')?.focus({preventScroll:true});return;}
+ if(btn.dataset.receivablesMore&&state.receivablesData?.next_offset!==null&&state.receivablesData?.next_offset!==undefined){
+  const page=await api('/api/reports/receivables?limit=50&offset='+state.receivablesData.next_offset);
+  state.receivablesData.items.push(...page.items);
+  state.receivablesData.next_offset=page.next_offset;
+  state.receivablesData.has_more=page.has_more;
+  render();return;
+ }
  if(btn.dataset.costMore&&state.costEvidence?.next_after){
   const page=await api('/api/reports/cost-evidence?limit=50&after='+state.costEvidence.next_after);
   state.costEvidence.items.push(...page.items);state.costEvidence.next_after=page.next_after;render();return;
