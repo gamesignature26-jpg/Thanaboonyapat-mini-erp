@@ -200,3 +200,24 @@ def test_return_validation_roles_and_listing(seeded, client, app):
     login(client, "accountant")
     assert client.get("/api/returns").status_code == 200
     assert client.get(f"/api/returns/{first.json['id']}").status_code == 200
+
+
+def test_return_print_preview_is_private_and_not_a_credit_note(seeded, client, app):
+    token, pid, cid = seeded
+    sid = create_sale(client, token, pid, cid)
+    with app.app_context():
+        line_id = db.session.scalar(db.select(SaleLine.id).where(SaleLine.sale_id == sid))
+    rid = return_request(client, token, sid, line_id).json["id"]
+    path = f"/api/returns/{rid}/print"
+    preview = client.get(path)
+    assert preview.status_code == 200
+    html = preview.get_data(as_text=True)
+    assert "ใบรับคืนสินค้าตัวอย่าง" in html
+    assert "ไม่ใช่ใบลดหนี้" in html
+    assert "Synthetic item" in html
+    assert "RETURN-DRAFT-" in html
+    assert "ออกใบลดหนี้แล้ว" not in html
+    noauth = client.application.test_client()
+    assert noauth.get(path).status_code == 401
+    login(client, "warehouse")
+    assert client.get(path).status_code == 200
