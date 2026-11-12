@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="th">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ใบวางบิลรวม (ร่าง) {{ batch.number }}</title></head>
+<body>
+<main>
+<h1>ใบวางบิลรวม (ร่าง) / MULTI-SALE BILLING DRAFT</h1>
+<p><strong>ไม่ใช่ใบกำกับภาษี ไม่ใช่ใบเสร็จรับเงิน และไม่ใช่หลักฐานรับชำระ</strong></p>
+<p>เลขอ้างอิงภายใน: {{ batch.number }} · วันที่ร่าง: {{ batch.created_at }}</p>
+<p>ลูกค้า: {{ batch.customer.name }} · เลขผู้เสียภาษี: {{ batch.customer.tax_id or '-' }}</p>
+<p>ที่อยู่: {{ batch.customer.address }}</p>
+<p>สถานะ: {{ 'ยกเลิกร่างแล้ว' if batch.status == 'void' else 'ร่างรอทบทวน' }}</p>
+<p>หมายเหตุ: {{ batch.note or '-' }}</p>
+<table>
+<thead><tr><th>เลขบิลขาย</th><th>วันที่ขาย</th><th>ยอดขาย</th><th>ค้างชำระ ณ วันร่าง</th><th>ค้างชำระปัจจุบัน</th></tr></thead>
+<tbody>
+{% for item in batch.items %}
+<tr><td>#{{ item.sale_id }}</td><td>{{ item.sale_date }}</td><td>{{ item.sale_total }}</td>
+<td>{{ item.outstanding_at_creation }}</td><td>{{ item.outstanding_now }}</td></tr>
+{% endfor %}
+</tbody>
+</table>
+<p>ยอดค้าง ณ วันสร้างร่าง: {{ batch.snapshot_total }} บาท</p>
+<p><strong>ยอดค้างปัจจุบัน ณ เวลาที่เปิดเอกสาร: {{ batch.current_outstanding }} บาท</strong></p>
+{% if batch.status == 'void' %}
+<p><strong>ยกเลิกร่างแล้ว ห้ามใช้เรียกเก็บเงิน</strong> เหตุผล: {{ batch.void_reason }}</p>
+{% endif %}
+<p>ตัวเลขปัจจุบันอัปเดตจากบิลขายและยอดรับชำระของระบบ โดยไม่สร้างลูกหนี้ใหม่
+ไม่ออกใบกำกับภาษี และไม่ใช่หลักฐานว่าลูกค้าได้รับเอกสาร</p>
+</main>
+</body>
+</html>
