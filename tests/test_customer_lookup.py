@@ -60,3 +60,19 @@ def test_customer_history_shows_sales_and_outstanding(seeded, client):
 def test_customer_history_restricts_warehouse(client):
     login(client, "warehouse")
     assert client.get("/api/customers/1/history").status_code == 403
+
+
+def test_customer_history_uses_a_stable_older_sales_cursor(seeded, client):
+    token, pid, cid = seeded
+    first = post(client, token, "/sales", {"customer_id": cid, "lines": [{"product_id": pid, "quantity": 1}]}).json[
+        "id"
+    ]
+    second = post(client, token, "/sales", {"customer_id": cid, "lines": [{"product_id": pid, "quantity": 1}]}).json[
+        "id"
+    ]
+    page = client.get(f"/api/customers/{cid}/history?limit=1").json
+    assert page["items"][0]["id"] == second
+    assert page["next_before"] == second
+    older = client.get(f"/api/customers/{cid}/history?limit=1&before={page['next_before']}").json
+    assert older["items"][0]["id"] == first
+    assert older["next_before"] is None
