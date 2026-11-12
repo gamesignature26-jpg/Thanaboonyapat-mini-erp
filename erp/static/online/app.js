@@ -3,17 +3,17 @@
 'use strict';
 const root = document.getElementById('root');
 const toast = document.getElementById('toast');
-const state = {user:null,csrf:null,view:'dashboard',products:[],customers:[],sales:[],orders:[],expenses:[],users:[],summary:null,cart:new Map(),wh:[],quoteLines:[],quotations:[],quoteSelected:null,returns:[],returnsCursor:null,returnEligible:null,returnLines:[],returnSelected:null,returnReason:'',vatRate:7,busy:false,company:{},specialPrices:[],selectedCustomer:0,imageIds:[],posCustomer:0,posPrices:new Map(),posPriceReady:false,posMethod:"cash",customerLookupResults:null,customerHistory:null,salesOutstanding:false,salesCursor:null,search:{},posVatMode:'exclusive',lastSale:null};
-const labels = {dashboard:'ภาพรวมธุรกิจ',pos:'ขายหน้าร้าน POS',wholesale:'ขายส่ง / จัดส่ง',sales:'บิลขาย / ลูกหนี้',quotations:'ใบเสนอราคา',returns:'รับคืนสินค้า',inventory:'สินค้าและสต๊อก',customers:'ลูกค้า',expenses:'ค่าใช้จ่าย',reports:'รายงาน',users:'ผู้ใช้งาน',prices:'ราคาพิเศษ',settings:'ตั้งค่าบริษัท'};
+const state = {user:null,csrf:null,view:'dashboard',products:[],customers:[],sales:[],orders:[],expenses:[],users:[],summary:null,cart:new Map(),wh:[],quoteLines:[],quotations:[],quoteSelected:null,returns:[],returnsCursor:null,suppliers:[],purchases:[],purchaseCursor:null,purchaseLines:[],purchaseSelected:null,returnEligible:null,returnLines:[],returnSelected:null,returnReason:'',vatRate:7,busy:false,company:{},specialPrices:[],selectedCustomer:0,imageIds:[],posCustomer:0,posPrices:new Map(),posPriceReady:false,posMethod:"cash",customerLookupResults:null,customerHistory:null,salesOutstanding:false,salesCursor:null,search:{},posVatMode:'exclusive',lastSale:null};
+const labels = {dashboard:'ภาพรวมธุรกิจ',pos:'ขายหน้าร้าน POS',wholesale:'ขายส่ง / จัดส่ง',sales:'บิลขาย / ลูกหนี้',quotations:'ใบเสนอราคา',returns:'รับคืนสินค้า',purchases:'จัดซื้อและรับสินค้า',inventory:'สินค้าและสต๊อก',customers:'ลูกค้า',expenses:'ค่าใช้จ่าย',reports:'รายงาน',users:'ผู้ใช้งาน',prices:'ราคาพิเศษ',settings:'ตั้งค่าบริษัท'};
 const roleLabels = {admin:'เจ้าของระบบ',sales:'พนักงานขาย',warehouse:'พนักงานคลัง',accountant:'พนักงานบัญชี'};
 const navGroups = [
  ['งานขาย',['dashboard','pos','wholesale','sales','quotations','returns']],
- ['ข้อมูลร้าน',['inventory','customers','prices']],
+ ['ข้อมูลร้าน',['inventory','customers','prices','purchases']],
  ['หลังร้าน',['expenses','reports','users','settings','operations']],
 ];
 const roleViews = {
  admin:Object.keys(labels), sales:['dashboard','pos','wholesale','sales','quotations','returns','inventory','customers','prices'],
- warehouse:['dashboard','wholesale','inventory','returns'], accountant:['dashboard','wholesale','sales','quotations','returns','inventory','customers','expenses','reports'],
+ warehouse:['dashboard','wholesale','inventory','returns','purchases'], accountant:['dashboard','wholesale','sales','quotations','returns','purchases','inventory','customers','expenses','reports'],
 };
 const $=id=>document.getElementById(id);
 const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -71,7 +71,7 @@ async function refresh(){
  if(!state.user)return;
  try{
   const needs=state.view;
-  const base=['dashboard','reports','pos','wholesale','sales','quotations','returns','inventory','customers','prices'].includes(needs);
+  const base=['dashboard','reports','pos','wholesale','sales','quotations','returns','purchases','inventory','customers','prices'].includes(needs);
   if(base){
   const requests=[api('/products'),api('/customers'),api('/api/online/dashboard'),api('/api/online/sales'),api('/api/online/orders'),api('/api/online/config')];if(state.user.role==='admin')requests.push(api('/users'));
   const results=await Promise.allSettled(requests);
@@ -85,6 +85,10 @@ async function refresh(){
   }
   if(needs==='quotations')state.quotations=(await api('/api/quotations')).items;
   if(needs==='returns'){const page=await api('/api/returns');state.returns=page.items;state.returnsCursor=page.next_before;}
+  if(needs==='purchases'){
+   const [vendors,orders]=await Promise.all([api('/api/suppliers'),api('/api/purchases')]);
+   state.suppliers=vendors.items;state.purchases=orders.items;state.purchaseCursor=orders.next_before;
+  }
   if(needs==='expenses')state.expenses=(await api('/api/online/expenses')).items;
   if(needs==='users'&&state.user.role==='admin')state.users=(await api('/users')).items;
    if(needs==='settings'&&state.user.role==='admin')state.company=await api('/api/extended/company');
@@ -263,6 +267,18 @@ function returnIntake(){
  ${canInspect&&detail.status==='draft'?`<form id="return-inspect-form"><h3>ตรวจสภาพสินค้าจริง</h3><div class="field"><label>ผลตรวจสภาพ<select name="condition"><option value="resellable">ขายต่อได้ — นำกลับเข้าสต็อก</option><option value="damaged">ชำรุด — ไม่เพิ่มสต็อกขาย</option></select></label></div>${field('หมายเหตุการตรวจรับ','inspection_note','text','','required maxlength="600"')}<div class="row"><button class="btn">ยืนยันรับคืน</button><button type="button" class="btn secondary" data-return-reject="${detail.id}">ปฏิเสธรับคืน</button></div></form>`:''}
  </section>`:''}`;
 }
+function purchasing(){
+ const canCreate=['admin','accountant'].includes(state.user.role);
+ const canReceive=['admin','warehouse'].includes(state.user.role);
+ const lines=state.purchaseLines.map((x,i)=>{
+  const product=state.products.find(p=>p.id===x.product_id);
+  return `<tr><td>${esc(product?.name||x.product_id)}</td><td>${x.quantity}</td><td>${fmt(x.unit_cost)}</td><td><button type="button" class="btn secondary slim" data-purchase-remove="${i}">ลบ</button></td></tr>`;
+ }).join('');
+ const rows=state.purchases.map(x=>`<tr><td>${esc(x.number)}</td><td>${esc(x.supplier_name)}</td><td>${fmt(x.subtotal_cost)}</td><td>${x.status==='received'?'รับสินค้าแล้ว':'รอรับสินค้า'}</td><td><button type="button" class="btn secondary slim" data-purchase-detail="${x.id}">รายละเอียด</button></td></tr>`).join('');
+ const selected=state.purchaseSelected;
+ const detail=selected?`<section class="card" id="purchase-detail"><h2>${esc(selected.number)}</h2><p>ซัพพลายเออร์: ${esc(selected.supplier.name)} · ต้นทุนรวม ${fmt(selected.subtotal_cost)} (ไม่รวม VAT ซื้อ)</p><p>สถานะ: ${selected.status==='received'?'รับสินค้าแล้ว':'ใบสั่งซื้อร่าง'}</p><p>หมายเหตุ: ${esc(selected.note)}</p><div class="tablewrap"><table><thead><tr><th>สินค้า</th><th>จำนวน</th><th>ต้นทุนต่อหน่วย</th></tr></thead><tbody>${selected.lines.map(x=>`<tr><td>${esc(x.name)} · ${esc(x.sku)}</td><td>${x.quantity}</td><td>${fmt(x.unit_cost)}</td></tr>`).join('')}</tbody></table></div>${canReceive&&selected.status==='draft'?`<form id="purchase-receive-form"><h3>ยืนยันรับสินค้าจริงเข้าคลัง</h3><p class="small-note">การยืนยันนี้เพิ่มสต็อกทุกบรรทัดครั้งเดียว กรุณานับสินค้าก่อนกด</p>${field('หมายเหตุการตรวจรับ','receipt_note','text','','required maxlength="600"')}<button class="btn block">ยืนยันรับสินค้าเข้าสต็อก</button></form>`:''}${selected.status==='received'?`<p>ผู้ตรวจรับ #${selected.received_by} · ${formatDate(selected.received_at)} · ${esc(selected.receipt_note||'')}</p>`:''}</section>`:'';
+ return `${canCreate?`<div class="grid g2"><section class="card"><h2>เพิ่มซัพพลายเออร์</h2><form id="supplier-form">${field('ชื่อซัพพลายเออร์','name','text','','required maxlength="200"')}${field('เลขผู้เสียภาษี (ถ้ามี)','tax_id','text','','maxlength="13"')}${field('ที่อยู่ซัพพลายเออร์','address','text','','maxlength="1000"')}<button class="btn block">บันทึกซัพพลายเออร์</button></form></section><section class="card"><h2>เพิ่มสินค้าที่สั่งซื้อ</h2><form id="purchase-add-form"><div class="field"><label>สินค้า ${productSelect()}</label></div>${field('จำนวนแพ็ค/หน่วย','quantity','number','1','min="1" max="1000000" step="1" required')}${field('ต้นทุนต่อหน่วย ไม่รวม VAT ซื้อ','unit_cost','number','','required min="0.01" step="0.01"')}<button class="btn secondary block">เพิ่มสินค้าในใบสั่งซื้อ</button></form></section></div><section class="card"><h2>ใบสั่งซื้อร่าง</h2><div class="tablewrap"><table><thead><tr><th>สินค้า</th><th>จำนวน</th><th>ต้นทุน/หน่วย</th><th>จัดการ</th></tr></thead><tbody>${lines||'<tr><td colspan="4">ยังไม่มีรายการสินค้า</td></tr>'}</tbody></table></div><form id="purchase-form"><div class="field"><label>ซัพพลายเออร์<select name="supplier_id" required><option value="">เลือกซัพพลายเออร์</option>${state.suppliers.map(s=>opt(s.id,s.name)).join('')}</select></label></div>${field('หมายเหตุใบสั่งซื้อ','note','text','','maxlength="600"')}<button class="btn block" ${!state.purchaseLines.length||!state.suppliers.length?'disabled':''}>บันทึกใบสั่งซื้อร่าง</button></form><p class="small-note">สร้างใบสั่งซื้อไม่เพิ่มสต็อก ไม่บันทึกเงินจ่าย และไม่ใช่เอกสารภาษี</p></section>`:''}<section class="card"><h2>รายการใบสั่งซื้อและตรวจรับ</h2><div class="tablewrap"><table><thead><tr><th>เลขร่าง</th><th>ซัพพลายเออร์</th><th>ต้นทุนสินค้า</th><th>สถานะ</th><th>รายละเอียด</th></tr></thead><tbody>${rows||'<tr><td colspan="5">ยังไม่มีใบสั่งซื้อ</td></tr>'}</tbody></table></div>${state.purchaseCursor?'<button type="button" class="btn secondary" data-purchase-more="1">รายการเก่ากว่า</button>':''}</section>${detail}<p class="small-note">ต้นทุนที่บันทึกเป็นต้นทุนซื้อสินค้า ไม่ใช่กำไรสุทธิหรือ COGS ที่คิดจากสินค้าที่ขาย</p>`;
+}
 function inventory(){const canWrite=['admin','warehouse'].includes(state.user.role);return `<div class="grid g2">${canWrite?`<div class="card"><h2>เพิ่มสินค้า</h2><form id="product-form">${field('รหัสสินค้า SKU','sku','text','','required maxlength="80"')}${field('ชื่อสินค้า','name','text','','required maxlength="200"')}${field('ราคาขายก่อน VAT (บาท)','price','number','','required min="0" step="0.01"')}<button class="btn">บันทึกสินค้า</button></form></div><div class="card"><h2>รับเข้า / ปรับสต๊อก</h2><form id="stock-form"><div class="field"><label>สินค้า</label>${productSelect()}</div>${field('จำนวนเพิ่ม (+) หรือลด (−)','delta','number','1','step="1" required')}${field('เหตุผลปรับสต๊อก','reason','text','','required maxlength="200"')}<button class="btn">บันทึกสต๊อก</button></form></div>`:''}</div><div class="card"><h2>สินค้าคงเหลือ</h2><div class="tablewrap"><table><thead><tr><th>SKU</th><th>สินค้า</th><th class="num">ราคา</th><th class="num">คงเหลือ</th></tr></thead><tbody>${state.products.map(p=>`<tr><td>${esc(p.sku)}</td><td>${esc(p.name)}</td><td class="num">${fmt(p.price)}</td><td class="num">${p.stock}</td></tr>`).join('')}</tbody></table></div></div>`;}
 function customers(){
  const rows=(state.customerLookupResults||state.customers).map(c=>`<tr data-search-text="${esc(c.name+' '+c.address+' '+(c.tax_id||''))}"><td><b>${esc(c.name)}</b><div class="muted">${esc(c.address)}</div><button type="button" class="btn secondary slim" data-customer-history="${c.id}">ดูประวัติซื้อ</button></td></tr>`).join('');
@@ -319,6 +335,8 @@ function render(){
  if(!view)return;
  const quoteStatusDraft=$('quote-status-note')?.value||'';
  const returnReasonDraft=$('return-reason')?.value??state.returnReason;
+ const purchaseForm=$('purchase-form');
+ const purchaseDraft=purchaseForm?f(purchaseForm):null;
  const quoteForm=$('quote-form');
  const quoteDraft=quoteForm?f(quoteForm):null;
  const wholesaleDraft=$('wh-form');
@@ -326,10 +344,14 @@ function render(){
  const focused=document.activeElement;
  const cartAction=focused?.matches('.qty-control,.product[data-add]')?
   {attr:focused.hasAttribute('data-dec')?'data-dec':'data-add',id:focused.dataset.dec||focused.dataset.add,qty:focused.classList.contains('qty-control')}:null;
- const map={dashboard,pos,wholesale,sales,quotations,returns:returnIntake,inventory:inventoryWithExtras,customers,expenses,reports,users,prices,settings};
+ const map={dashboard,pos,wholesale,sales,quotations,returns:returnIntake,purchases:purchasing,inventory:inventoryWithExtras,customers,expenses,reports,users,prices,settings};
  view.innerHTML=(map[state.view]||dashboard)();
  if($('quote-status-note'))$('quote-status-note').value=quoteStatusDraft;
  if($('return-reason'))$('return-reason').value=returnReasonDraft;
+ if(purchaseDraft&&$('purchase-form'))for(const [name,value] of Object.entries(purchaseDraft)){
+  const control=$('purchase-form').elements.namedItem(name);
+  if(control)control.value=value;
+ }
  view.setAttribute('aria-busy','false');
  if(quoteDraft&&$('quote-form'))for(const [name,value] of Object.entries(quoteDraft)){
   const control=$('quote-form').elements.namedItem(name);
@@ -541,7 +563,7 @@ document.addEventListener('click',async event=>{
  }
  if(btn.id==='show-forgot'){showForgot();return;}
  if(btn.id==='show-login'){showLogin();return;}
- if(btn.id==='logout'){await api('/auth/logout',{method:'POST',body:{}});state.user=null;state.csrf=null;state.search={};state.cart.clear();state.wh=[];state.quoteLines=[];state.quotations=[];state.quoteSelected=null;state.returns=[];state.returnEligible=null;state.returnLines=[];state.returnSelected=null;state.returnReason='';state.posCustomer=0;state.posPrices.clear();state.posPriceReady=false;state.posMethod='cash';state.posVatMode='exclusive';state.lastSale=null;window.erpPrinter.disconnect();showLogin();return;}
+ if(btn.id==='logout'){await api('/auth/logout',{method:'POST',body:{}});state.user=null;state.csrf=null;state.search={};state.cart.clear();state.wh=[];state.quoteLines=[];state.quotations=[];state.quoteSelected=null;state.returns=[];state.returnEligible=null;state.returnLines=[];state.returnSelected=null;state.returnReason='';state.purchases=[];state.suppliers=[];state.purchaseLines=[];state.purchaseSelected=null;state.purchaseCursor=null;state.posCustomer=0;state.posPrices.clear();state.posPriceReady=false;state.posMethod='cash';state.posVatMode='exclusive';state.lastSale=null;window.erpPrinter.disconnect();showLogin();return;}
  if(btn.dataset.add){const id=Number(btn.dataset.add);const p=state.products.find(p=>p.id===id);if(!p)return;const qty=state.cart.get(id)||0;if(qty>=p.stock)throw Error('สินค้าไม่พอ');state.cart.set(id,qty+1);render();return;}
  if(btn.dataset.dec){const id=Number(btn.dataset.dec),qty=(state.cart.get(id)||0)-1;if(qty<=0)state.cart.delete(id);else state.cart.set(id,qty);render();return;}
  if(btn.dataset.whdel!==undefined){state.wh.splice(Number(btn.dataset.whdel),1);render();return;}
