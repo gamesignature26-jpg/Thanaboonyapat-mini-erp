@@ -1,11 +1,11 @@
 services:
   - type: web
-    name: thanabunyapat-erp-staging
+    name: thanabunyapat-erp-flow-staging
     runtime: python
     region: singapore
     plan: free
-    branch: feature/thanabunyapat-online
-    autoDeployTrigger: 'off'
+    branch: feature/flow-loyverse-additions-20261112
+    autoDeployTrigger: checksPass
     buildCommand: pip install -r requirements.txt
     startCommand: >-
       DATABASE_URL="$(printf '%s' "$DATABASE_URL" | sed -e 's#^postgres://#postgresql+psycopg://#' -e 's#^postgresql://#postgresql+psycopg://#')"; export DATABASE_URL; flask --app erp db upgrade && flask --app erp bootstrap-admin && exec gunicorn --bind 0.0.0.0:${PORT} 'erp:create_app()'
@@ -15,9 +15,15 @@ services:
         generateValue: true
       - key: DATABASE_URL
         fromDatabase:
-          name: thanabunyapat-erp-test
+          name: thanabunyapat-erp-flow-staging-db
           property: connectionString
       - key: VAT_RATE
         value: "7.00"
       - key: RATELIMIT_STORAGE_URI
         value: memory://
+
+databases:
+  - name: thanabunyapat-erp-flow-staging-db
+    region: singapore
+    plan: free
+
