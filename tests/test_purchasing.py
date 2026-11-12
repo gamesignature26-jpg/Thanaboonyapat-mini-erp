@@ -1,6 +1,8 @@
 """Synthetic-only supplier purchasing and inventory receiving integration contracts."""
 
+import pytest
 from conftest import login, post
+from test_concurrency import concurrent_requests
 
 from erp.models import Product, Sale, StockMovement, db
 
@@ -152,3 +154,23 @@ def test_purchase_receipt_rejects_bad_request_and_unauthorized_roles(seeded, cli
     assert post(client, accountant, f"/api/purchases/{order}/receive", {"receipt_note": "No"}).status_code == 403
     with app.app_context():
         assert db.session.get(Product, pid).stock == 10
+
+
+def test_postgres_concurrent_receiving_cannot_double_stock(seeded, client, app):
+    if not app.config["SQLALCHEMY_DATABASE_URI"].startswith("postgresql"):
+        pytest.skip("Row locks require PostgreSQL")
+    token, pid, _cid = seeded
+    sid = supplier(client, token)
+    order_id = post(client, token, "/api/purchases", purchase(sid, pid)).json["id"]
+    responses = concurrent_requests(
+        app,
+        f"/api/purchases/{order_id}/receive",
+        [
+            {"receipt_note": "Synthetic receiving team A"},
+            {"receipt_note": "Synthetic receiving team B"},
+        ],
+    )
+    assert responses == [200, 409]
+    with app.app_context():
+        assert db.session.get(Product, pid).stock == 14
+        assert db.session.scalar(db.select(db.func.count(StockMovement.id))) == 2
