@@ -3,17 +3,17 @@
 'use strict';
 const root = document.getElementById('root');
 const toast = document.getElementById('toast');
-const state = {user:null,csrf:null,view:'dashboard',products:[],customers:[],sales:[],orders:[],expenses:[],users:[],summary:null,cart:new Map(),wh:[],quoteLines:[],quotations:[],quoteSelected:null,returns:[],returnsCursor:null,suppliers:[],purchases:[],purchaseCursor:null,purchaseLines:[],purchaseSelected:null,returnEligible:null,returnLines:[],returnSelected:null,returnReason:'',vatRate:7,busy:false,company:{},specialPrices:[],selectedCustomer:0,imageIds:[],posCustomer:0,posPrices:new Map(),posPriceReady:false,posMethod:"cash",customerLookupResults:null,customerHistory:null,salesOutstanding:false,salesCursor:null,search:{},posVatMode:'exclusive',lastSale:null};
-const labels = {dashboard:'ภาพรวมธุรกิจ',pos:'ขายหน้าร้าน POS',wholesale:'ขายส่ง / จัดส่ง',sales:'บิลขาย / ลูกหนี้',quotations:'ใบเสนอราคา',returns:'รับคืนสินค้า',purchases:'จัดซื้อและรับสินค้า',inventory:'สินค้าและสต๊อก',customers:'ลูกค้า',expenses:'ค่าใช้จ่าย',reports:'รายงาน',users:'ผู้ใช้งาน',prices:'ราคาพิเศษ',settings:'ตั้งค่าบริษัท'};
+const state = {user:null,csrf:null,view:'dashboard',products:[],customers:[],sales:[],orders:[],expenses:[],users:[],summary:null,cart:new Map(),wh:[],quoteLines:[],quotations:[],quoteSelected:null,returns:[],returnsCursor:null,suppliers:[],purchases:[],purchaseCursor:null,purchaseLines:[],purchaseSelected:null,billingBatches:[],billingCursor:null,billingSelected:null,billingCustomerId:null,billingEligible:[],billingEligibleCursor:null,returnEligible:null,returnLines:[],returnSelected:null,returnReason:'',vatRate:7,busy:false,company:{},specialPrices:[],selectedCustomer:0,imageIds:[],posCustomer:0,posPrices:new Map(),posPriceReady:false,posMethod:"cash",customerLookupResults:null,customerHistory:null,salesOutstanding:false,salesCursor:null,search:{},posVatMode:'exclusive',lastSale:null};
+const labels = {dashboard:'ภาพรวมธุรกิจ',pos:'ขายหน้าร้าน POS',wholesale:'ขายส่ง / จัดส่ง',sales:'บิลขาย / ลูกหนี้',billing_batches:'ใบวางบิลรวม',quotations:'ใบเสนอราคา',returns:'รับคืนสินค้า',purchases:'จัดซื้อและรับสินค้า',inventory:'สินค้าและสต๊อก',customers:'ลูกค้า',expenses:'ค่าใช้จ่าย',reports:'รายงาน',users:'ผู้ใช้งาน',prices:'ราคาพิเศษ',settings:'ตั้งค่าบริษัท'};
 const roleLabels = {admin:'เจ้าของระบบ',sales:'พนักงานขาย',warehouse:'พนักงานคลัง',accountant:'พนักงานบัญชี'};
 const navGroups = [
- ['งานขาย',['dashboard','pos','wholesale','sales','quotations','returns']],
+ ['งานขาย',['dashboard','pos','wholesale','sales','billing_batches','quotations','returns']],
  ['ข้อมูลร้าน',['inventory','customers','prices','purchases']],
  ['หลังร้าน',['expenses','reports','users','settings','operations']],
 ];
 const roleViews = {
- admin:Object.keys(labels), sales:['dashboard','pos','wholesale','sales','quotations','returns','inventory','customers','prices'],
- warehouse:['dashboard','wholesale','inventory','returns','purchases'], accountant:['dashboard','wholesale','sales','quotations','returns','purchases','inventory','customers','expenses','reports'],
+ admin:Object.keys(labels), sales:['dashboard','pos','wholesale','sales','billing_batches','quotations','returns','inventory','customers','prices'],
+ warehouse:['dashboard','wholesale','inventory','returns','purchases'], accountant:['dashboard','wholesale','sales','billing_batches','quotations','returns','purchases','inventory','customers','expenses','reports'],
 };
 const $=id=>document.getElementById(id);
 const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -71,7 +71,7 @@ async function refresh(){
  if(!state.user)return;
  try{
   const needs=state.view;
-  const base=['dashboard','reports','pos','wholesale','sales','quotations','returns','purchases','inventory','customers','prices'].includes(needs);
+  const base=['dashboard','reports','pos','wholesale','sales','billing_batches','quotations','returns','purchases','inventory','customers','prices'].includes(needs);
   if(base){
   const requests=[api('/products'),api('/customers'),api('/api/online/dashboard'),api('/api/online/sales'),api('/api/online/orders'),api('/api/online/config')];if(state.user.role==='admin')requests.push(api('/users'));
   const results=await Promise.allSettled(requests);
@@ -82,6 +82,14 @@ async function refresh(){
    const salesPage=await api('/api/online/sales?outstanding='+(state.salesOutstanding?'1':'0'));
    state.sales=salesPage.items;
    state.salesCursor=salesPage.next_before;
+  }
+  if(needs==='billing_batches'){
+   const batches=await api('/api/billing-batches');
+   state.billingBatches=batches.items;state.billingCursor=batches.next_before;
+   if(state.billingCustomerId){
+    const available=await api('/api/billing-batches/eligible?customer_id='+state.billingCustomerId);
+    state.billingEligible=available.items;state.billingEligibleCursor=available.next_before;
+   }
   }
   if(needs==='quotations')state.quotations=(await api('/api/quotations')).items;
   if(needs==='returns'){const page=await api('/api/returns');state.returns=page.items;state.returnsCursor=page.next_before;}
@@ -231,6 +239,15 @@ function sales(){
  <p>${state.salesOutstanding?'กำลังดูเฉพาะบิลที่ยังมียอดค้าง':'กำลังดูบิลทั้งหมด'} · รับชำระบางส่วนหรือเต็มยอด</p>
  ${tableSales(state.sales)}${state.salesCursor?'<button type="button" class="btn secondary" data-sales-more>โหลดบิลเก่ากว่า</button>':''}</div>`;
 }
+function billingBatches(){
+ const canCreate=['admin','accountant'].includes(state.user.role);
+ const available=state.billingEligible.map(x=>`<tr><td><label><input type="checkbox" name="sale_ids" value="${x.sale_id}"> บิล #${x.sale_id}</label></td><td>${formatDate(x.sale_date)}</td><td>${fmt(x.outstanding)}</td></tr>`).join('');
+ const batches=state.billingBatches.map(x=>`<tr><td>${esc(x.number)}</td><td>${esc(x.customer_name)}</td><td>${fmt(x.snapshot_total)}</td><td>${x.status==='draft'?'ร่าง':'ยกเลิกแล้ว'}</td><td><button type="button" class="btn secondary slim" data-billing-detail="${x.id}">ดูร่าง</button> <a class="btn secondary slim" href="/api/billing-batches/${x.id}/print" target="_blank" rel="noopener">พิมพ์ร่าง</a></td></tr>`).join('');
+ const selected=state.billingSelected;
+ const detail=selected?`<section class="card" id="billing-batch-detail"><h2>${esc(selected.number)} — ${selected.status==='draft'?'ร่าง':'ยกเลิกแล้ว'}</h2><p>ลูกค้า: ${esc(selected.customer.name)}</p><p>ยอดค้าง ณ วันสร้างร่าง: ${fmt(selected.snapshot_total)} · ยอดค้างปัจจุบัน: <strong>${fmt(selected.current_outstanding)}</strong></p><p>${esc(selected.note||'')}</p><div class="tablewrap"><table><thead><tr><th>บิลขาย</th><th>วันที่ขาย</th><th>ค้าง ณ วันสร้าง</th><th>ค้างปัจจุบัน</th></tr></thead><tbody>${selected.items.map(x=>`<tr><td>#${x.sale_id}</td><td>${formatDate(x.sale_date)}</td><td>${fmt(x.outstanding_at_creation)}</td><td>${fmt(x.outstanding_now)}</td></tr>`).join('')}</tbody></table></div><p><a class="btn secondary slim" href="/api/billing-batches/${selected.id}/print" target="_blank" rel="noopener">พิมพ์ใบวางบิลรวมร่าง</a></p>${canCreate&&selected.status==='draft'?`<form id="billing-void-form">${field('เหตุผลยกเลิกร่าง','reason','text','','required maxlength="600"')}<button class="btn secondary">ยกเลิกใบวางบิลร่าง</button></form>`:''}${selected.status==='void'?`<p>เหตุผลยกเลิก: ${esc(selected.void_reason||'')}</p>`:''}</section>`:'';
+ const create=canCreate?`<section class="card"><h2>เลือกบิลค้างชำระของลูกค้ารายเดียวกัน</h2><form id="billing-customer-form">${customerSelect('customer_id',state.billingCustomerId||'')}<button class="btn secondary">โหลดบิลค้างชำระ</button></form>${state.billingCustomerId?`<form id="billing-create-form"><div class="tablewrap"><table><thead><tr><th>เลือกบิลขาย</th><th>วันที่</th><th>ยอดค้าง</th></tr></thead><tbody>${available||'<tr><td colspan="3">ไม่มีบิลว่างที่ยังค้างชำระ</td></tr>'}</tbody></table></div>${state.billingEligibleCursor?'<button type="button" class="btn secondary slim" data-billing-more-sales="1">โหลดบิลค้างเพิ่มเติม</button>':''}${field('หมายเหตุการวางบิล','note','text','','maxlength="600"')}<button class="btn block" ${!state.billingEligible.length?'disabled':''}>บันทึกใบวางบิลรวม (ร่าง)</button></form>`:''}</section>`:'';
+ return `<div class="card"><h2>ใบวางบิลรวมหลายบิลขาย</h2><p>สร้างร่างเท่านั้น ไม่เพิ่มยอดลูกหนี้ ไม่ใช่ใบกำกับภาษีหรือใบเสร็จ และไม่ส่งถึงลูกค้าอัตโนมัติ</p></div>${create}<section class="card"><h2>ร่างใบวางบิลรวมย้อนหลัง</h2><div class="tablewrap"><table><thead><tr><th>เลขอ้างอิง</th><th>ลูกค้า</th><th>ยอด ณ วันร่าง</th><th>สถานะ</th><th>รายละเอียด</th></tr></thead><tbody>${batches||'<tr><td colspan="5">ยังไม่มีรายการ</td></tr>'}</tbody></table></div>${state.billingCursor?'<button type="button" class="btn secondary" data-billing-more="1">โหลดรายการเก่า</button>':''}</section>${detail}`;
+}
 function quotations(){
  const canCreate=['admin','sales'].includes(state.user.role);
  const lines=state.quoteLines.map((x,i)=>{
@@ -344,7 +361,7 @@ function render(){
  const focused=document.activeElement;
  const cartAction=focused?.matches('.qty-control,.product[data-add]')?
   {attr:focused.hasAttribute('data-dec')?'data-dec':'data-add',id:focused.dataset.dec||focused.dataset.add,qty:focused.classList.contains('qty-control')}:null;
- const map={dashboard,pos,wholesale,sales,quotations,returns:returnIntake,purchases:purchasing,inventory:inventoryWithExtras,customers,expenses,reports,users,prices,settings};
+ const map={dashboard,pos,wholesale,sales,billing_batches:billingBatches,quotations,returns:returnIntake,purchases:purchasing,inventory:inventoryWithExtras,customers,expenses,reports,users,prices,settings};
  view.innerHTML=(map[state.view]||dashboard)();
  if($('quote-status-note'))$('quote-status-note').value=quoteStatusDraft;
  if($('return-reason'))$('return-reason').value=returnReasonDraft;
@@ -425,6 +442,33 @@ async function send(form){if(state.busy)return;state.busy=true;const submit=form
  }
  else if(id==='pos-form')await confirmSale('pos',form);
  else if(id==='wh-form')await confirmSale('wholesale',form);
+ else if(id==='billing-customer-form'){
+  const customerId=Number(v.customer_id);
+  if(!Number.isInteger(customerId)||customerId<1)throw Error('กรุณาเลือกลูกค้า');
+  state.billingCustomerId=customerId;state.billingEligible=[];await refresh();
+ }
+ else if(id==='billing-create-form'){
+  if(!state.billingCustomerId)throw Error('กรุณาเลือกลูกค้า');
+  const sale_ids=new FormData(form).getAll('sale_ids').map(Number);
+  if(!sale_ids.length||sale_ids.length>25)throw Error('เลือกบิลค้างชำระ 1-25 บิล');
+  const body={customer_id:state.billingCustomerId,sale_ids,note:v.note||''};
+  const bytes=new TextEncoder().encode(JSON.stringify(body));
+  const hash=[...new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))].map(x=>x.toString(16).padStart(2,'0')).join('');
+  const slot='tb-pending-billing-batch-v1';
+  let pending=null;try{pending=JSON.parse(sessionStorage.getItem(slot)||'null');}catch(_){/* invalid retry key */}
+  const request_key=pending?.hash===hash?pending.key:uuid();
+  sessionStorage.setItem(slot,JSON.stringify({hash,key:request_key}));
+  const result=await api('/api/billing-batches',{method:'POST',body:{...body,request_key}});
+  sessionStorage.removeItem(slot);
+  state.billingSelected=await api(`/api/billing-batches/${result.id}`);
+  warn(`บันทึก ${result.number} สำเร็จ`);await refresh();
+ }
+ else if(id==='billing-void-form'){
+  if(!state.billingSelected)throw Error('กรุณาเลือกร่างใบวางบิล');
+  const result=await api(`/api/billing-batches/${state.billingSelected.id}/void`,{method:'POST',body:{reason:v.reason}});
+  state.billingSelected=await api(`/api/billing-batches/${result.id}`);
+  warn('ยกเลิกใบวางบิลร่างแล้ว');await refresh();
+ }
  else if(id==='supplier-form'){
   await api('/api/suppliers',{method:'POST',body:{name:v.name,tax_id:v.tax_id||null,address:v.address||''}});
   warn('บันทึกซัพพลายเออร์แล้ว');await refresh();
@@ -561,6 +605,15 @@ document.addEventListener('click',async event=>{
   if(btn.dataset.customerServerSearch){const term=state.search.customers||'';const page=await api('/api/customers/lookup?q='+encodeURIComponent(term)+'&limit=100');state.customerLookupResults=page.items;state.customerHistory=null;render();if(page.next_after)warn('แสดง 100 รายชื่อแรก กรุณาระบุคำค้นให้แคบลง');return;}
   if(btn.dataset.customerClear){state.customerLookupResults=null;state.customerHistory=null;state.search.customers='';render();return;}
   if(btn.dataset.customerHistory){state.customerHistory=await api(`/api/customers/${Number(btn.dataset.customerHistory)}/history`);render();$('customer-purchase-history')?.focus({preventScroll:true});return;}
+ if(btn.dataset.billingDetail){state.billingSelected=await api(`/api/billing-batches/${Number(btn.dataset.billingDetail)}`);render();return;}
+ if(btn.dataset.billingMore&&state.billingCursor){
+  const page=await api(`/api/billing-batches?before=${state.billingCursor}`);
+  state.billingBatches.push(...page.items);state.billingCursor=page.next_before;render();return;
+ }
+ if(btn.dataset.billingMoreSales&&state.billingCustomerId&&state.billingEligibleCursor){
+  const page=await api(`/api/billing-batches/eligible?customer_id=${state.billingCustomerId}&before=${state.billingEligibleCursor}`);
+  state.billingEligible.push(...page.items);state.billingEligibleCursor=page.next_before;render();return;
+ }
  if(btn.hasAttribute('data-quote-remove')){state.quoteLines.splice(Number(btn.dataset.quoteRemove),1);render();return;}
  if(btn.dataset.quoteTransition){
   const note=$('quote-status-note')?.value.trim();
@@ -601,7 +654,7 @@ document.addEventListener('click',async event=>{
  }
  if(btn.id==='show-forgot'){showForgot();return;}
  if(btn.id==='show-login'){showLogin();return;}
- if(btn.id==='logout'){await api('/auth/logout',{method:'POST',body:{}});state.user=null;state.csrf=null;state.search={};state.cart.clear();state.wh=[];state.quoteLines=[];state.quotations=[];state.quoteSelected=null;state.returns=[];state.returnEligible=null;state.returnLines=[];state.returnSelected=null;state.returnReason='';state.purchases=[];state.suppliers=[];state.purchaseLines=[];state.purchaseSelected=null;state.purchaseCursor=null;state.posCustomer=0;state.posPrices.clear();state.posPriceReady=false;state.posMethod='cash';state.posVatMode='exclusive';state.lastSale=null;window.erpPrinter.disconnect();showLogin();return;}
+ if(btn.id==='logout'){await api('/auth/logout',{method:'POST',body:{}});state.user=null;state.csrf=null;state.search={};state.cart.clear();state.wh=[];state.quoteLines=[];state.quotations=[];state.quoteSelected=null;state.returns=[];state.returnEligible=null;state.returnLines=[];state.returnSelected=null;state.returnReason='';state.purchases=[];state.suppliers=[];state.purchaseLines=[];state.purchaseSelected=null;state.purchaseCursor=null;state.billingBatches=[];state.billingCursor=null;state.billingSelected=null;state.billingCustomerId=null;state.billingEligible=[];state.billingEligibleCursor=null;state.posCustomer=0;state.posPrices.clear();state.posPriceReady=false;state.posMethod='cash';state.posVatMode='exclusive';state.lastSale=null;window.erpPrinter.disconnect();showLogin();return;}
  if(btn.dataset.add){const id=Number(btn.dataset.add);const p=state.products.find(p=>p.id===id);if(!p)return;const qty=state.cart.get(id)||0;if(qty>=p.stock)throw Error('สินค้าไม่พอ');state.cart.set(id,qty+1);render();return;}
  if(btn.dataset.dec){const id=Number(btn.dataset.dec),qty=(state.cart.get(id)||0)-1;if(qty<=0)state.cart.delete(id);else state.cart.set(id,qty);render();return;}
  if(btn.dataset.whdel!==undefined){state.wh.splice(Number(btn.dataset.whdel),1);render();return;}
