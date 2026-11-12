@@ -39,12 +39,15 @@ def test_receipts_are_evidence_but_not_verified_cogs_or_gross_profit(seeded, cli
     assert draft["gross_profit_status"] == "unavailable"
 
     warehouse = login(client, "warehouse")
-    assert post(
-        client,
-        warehouse,
-        f"/api/purchases/{purchase.json['id']}/receive",
-        {"receipt_note": "Counted four sealed packs"},
-    ).status_code == 200
+    assert (
+        post(
+            client,
+            warehouse,
+            f"/api/purchases/{purchase.json['id']}/receive",
+            {"receipt_note": "Counted four sealed packs"},
+        ).status_code
+        == 200
+    )
     login(client, "accountant")
     evidence = client.get("/api/reports/cost-evidence")
     assert evidence.status_code == 200
