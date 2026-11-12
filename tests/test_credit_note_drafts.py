@@ -97,10 +97,10 @@ def test_credit_draft_key_idempotency_limits_and_void(seeded, client, app):
         ).status_code
         == 409
     )
-    assert post(client, token, "/api/credit-note-drafts", request_body(999999)).status_code == 404
+    assert post(client, token, "/api/credit-note-drafts", request_body(999999, "synthetic-missing-credit-return-00001")).status_code == 404
     assert post(client, token, "/api/credit-note-drafts", {**request, "request_key": "short"}).status_code == 400
     assert post(client, token, "/api/credit-note-drafts", {**request, "vat_amount": "15.00"}).status_code == 409
-    assert post(client, token, "/api/credit-note-drafts", {**request, "amount_ex_vat": "-1.00"}).status_code == 400
+    assert post(client, token, "/api/credit-note-drafts", {**request, "request_key": "synthetic-invalid-credit-amount-0001", "amount_ex_vat": "-1.00"}).status_code == 400
     assert client.get("/api/credit-note-drafts?limit=0").status_code == 400
     assert client.get("/api/credit-note-drafts?before=x").status_code == 400
 
