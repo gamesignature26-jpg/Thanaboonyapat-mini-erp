@@ -403,6 +403,35 @@ async function send(form){if(state.busy)return;state.busy=true;const submit=form
  }
  else if(id==='pos-form')await confirmSale('pos',form);
  else if(id==='wh-form')await confirmSale('wholesale',form);
+ else if(id==='return-add-form'){
+  const line=state.returnEligible?.lines.find(x=>x.sale_line_id===Number(v.sale_line_id));
+  const qty=Number(v.quantity);
+  if(!line||!Number.isInteger(qty)||qty<1||qty>line.remaining_quantity)throw Error('จำนวนคืนไม่ถูกต้อง');
+  if(state.returnLines.some(x=>x.sale_line_id===line.sale_line_id))throw Error('รายการคืนซ้ำ');
+  state.returnReason=$('return-reason')?.value||state.returnReason;
+  state.returnLines.push({sale_line_id:line.sale_line_id,quantity:qty});render();
+ }
+ else if(id==='return-request-form'){
+  if(!state.returnEligible||!state.returnLines.length)throw Error('กรุณาระบุรายการคืน');
+  const body={sale_id:state.returnEligible.sale_id,lines:state.returnLines.map(x=>({...x})),reason:v.reason};
+  const bytes=new TextEncoder().encode(JSON.stringify(body));
+  const hash=[...new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))].map(b=>b.toString(16).padStart(2,'0')).join('');
+  const slot='tb-pending-return-v1';
+  let pending=null;try{pending=JSON.parse(sessionStorage.getItem(slot)||'null');}catch(_){/* ignore stale retry key */}
+  const request_key=pending?.hash===hash?pending.key:uuid();
+  sessionStorage.setItem(slot,JSON.stringify({hash,key:request_key}));
+  const result=await api('/api/returns',{method:'POST',body:{...body,request_key}});
+  sessionStorage.removeItem(slot);
+  state.returnLines=[];state.returnEligible=null;state.returnReason='';
+  state.returnSelected=await api(`/api/returns/${result.id}`);
+  warn('บันทึกคำขอรับคืนแล้ว');await refresh();
+ }
+ else if(id==='return-inspect-form'){
+  if(!state.returnSelected)throw Error('กรุณาเลือกรายการคืน');
+  const result=await api(`/api/returns/${state.returnSelected.id}/inspect`,{method:'POST',body:{condition:v.condition,inspection_note:v.inspection_note}});
+  state.returnSelected=await api(`/api/returns/${result.id}`);
+  warn(result.restocked?'ตรวจรับและเพิ่มสต็อกแล้ว':'บันทึกรับคืนสินค้าชำรุดแล้ว');await refresh();
+ }
  else if(id==='quote-add-form'){
   const p=state.products.find(x=>x.id===Number(v.product_id));const qty=Number(v.quantity);
   if(!p||!Number.isInteger(qty)||qty<1||qty>1000000)throw Error('ตรวจสอบสินค้าและจำนวน');
