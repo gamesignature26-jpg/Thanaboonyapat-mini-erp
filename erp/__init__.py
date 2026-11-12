@@ -526,4 +526,9 @@ def create_app(config=None):
 
     app.register_blueprint(cost_evidence_bp)
 
+    # Financial credit-review drafts are separate from stock, VAT and payments.
+    from .credit_note_drafts import bp as credit_note_drafts_bp
+
+    app.register_blueprint(credit_note_drafts_bp)
+
     return app
