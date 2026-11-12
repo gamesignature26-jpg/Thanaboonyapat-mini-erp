@@ -11,7 +11,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 
 from flask import Blueprint, abort, g, render_template, request
-from sqlalchemy import CheckConstraint, UniqueConstraint
+from sqlalchemy import CheckConstraint, Index, UniqueConstraint
 
 from . import data, integer, roles, text
 from .models import Customer, Sale, db
@@ -55,6 +55,7 @@ class BillingBatchLine(db.Model):
     outstanding_at_creation = db.Column(db.Numeric(14, 2), nullable=False)
     __table_args__ = (
         UniqueConstraint("batch_id", "sale_id", name="uq_billing_batch_sale"),
+        Index("ix_billing_batch_line_sale_id", "sale_id"),
         CheckConstraint("outstanding_at_creation > 0"),
     )
 
