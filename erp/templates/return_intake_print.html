@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="th">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>ใบรับคืนสินค้าตัวอย่าง {{ record.number }}</title></head>
+<body>
+<main>
+<h1>ใบรับคืนสินค้าตัวอย่าง</h1>
+<p><strong>ไม่ใช่ใบลดหนี้ ไม่ใช่ใบกำกับภาษี ไม่ใช่หลักฐานรับเงิน</strong></p>
+<p>เลขอ้างอิงภายใน {{ record.number }} · อ้างอิงบิลขาย #{{ record.sale_id }}</p>
+<p>ลูกค้า: {{ record.customer_name }}</p>
+<p>เหตุผลที่ขอคืน: {{ record.reason }}</p>
+<p>สถานะ: {{ record.status }} · สภาพสินค้า: {{ record.condition or "รอตรวจสอบ" }}</p>
+<p>หมายเหตุการตรวจรับ: {{ record.inspection_note or "ยังไม่มี" }}</p>
+<table>
+<thead><tr><th>รหัสสินค้า</th><th>สินค้า</th><th>จำนวนที่ขอคืน</th></tr></thead>
+<tbody>{% for item in record.lines %}<tr><td>{{ item.sku }}</td><td>{{ item.name }}</td><td>{{ item.quantity }}</td></tr>{% endfor %}</tbody>
+</table>
+<p>เอกสารนี้เป็นหลักฐานบันทึกคำขอและการตรวจรับภายในเท่านั้น การคืนเงินหรือปรับลูกหนี้ต้องผ่านขั้นตอนบัญชีแยกต่างหาก</p>
+</main>
+</body>
+</html>
