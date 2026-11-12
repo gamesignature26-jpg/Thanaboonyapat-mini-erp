@@ -82,3 +82,30 @@ Read `requirements.txt`, `.github/workflows/tests.yml`, `tests/conftest.py`, `re
 - New behavior is accessible via role-appropriate UI and protected API.
 - Idempotency, Decimal currency/VAT, isolation, authorization, auditability, and rollback safety are covered by tests.
 - Deployment remains staging-only until separately reviewed.
+
+
+## Continuation: cost evidence and financial credit drafts (2026-11-12 evening)
+
+**Implemented in feature branch, not deployed**:
+
+- `erp/cost_evidence.py` + `tests/test_cost_evidence.py` + Reports UI: accountant-only, read-only purchase receipt cost evidence, stock-movement reconciliation, pagination. Critically returns `null` for COGS and gross profit until an audited opening valuation and per-sale costs exist. Contract in `COST_EVIDENCE.md`. No migration for cost evidence. Fully green CI at commit `500c993d41572ee70e0433361b6c9a4c33871d26`, run https://github.com/gamesignature26-jpg/Thanaboonyapat-mini-erp/actions/runs/43242672847 .
+- `erp/credit_note_drafts.py`, `erp/templates/credit_note_draft_print.html`, migration `bd8c1a770e21_credit_note_drafts.py`, `tests/test_credit_note_drafts.py` and mobile browser flow: financial credit-review drafts bound to received physical returns; accountant-only, idempotent, immutable sale/buyer/return snapshots, per-sale monetary cap, explicit void history, read/print. No adjustment to sale/payment/stock/tax documents. Fully green CI at commit `d28eee764a42fccd309d3af8e2b196636e11bd43`, run https://github.com/gamesignature26-jpg/Thanaboonyapat-mini-erp/actions/runs/43245122676 . Contract in `CREDIT_NOTE_DRAFTS.md`. **Not an issued Thai tax credit note**.
+- `erp/receivables_report.py` and Reports UI: pagination and literal search escaping, preserving grand total across all pages. Extra regression test in `tests/test_receivables_report.py`. Fully green CI at commit `630a810f31e30520a92d3cee00cf0f6d4b60646e`, run https://github.com/gamesignature26-jpg/Thanaboonyapat-mini-erp/actions/runs/43245853537 .
+- `RELEASE_GATES_2026-11-12.md` captures current Render staging branch and Postgres expiry, missing restore verification, and health uncertainty. No deployment was made.
+
+**Audited existing features, do not duplicate**:
+
+- LINE webhook in `erp/operations.py` verifies LINE HMAC, filters approved users/groups, deduplicates webhook event IDs, and creates review-only order drafts; only sales staff can accept via the existing stock-locked order code. Existing `tests/test_operations.py` covers bad signature, duplicate ID, permissions and insufficient stock. It is **not** active natural-language auto-ordering or capacity-aware route optimization; real LINE configuration and callbacks remain unverified.
+- Existing 58 mm BLE UI uses user-provided GATT service/write UUID and ESC/POS raster transport in `erp/static/online/printer.js`. Mobile tests use fake BLE. Real printer compatibility, Thai glyphs, USB/A4 and mobile Bluetooth capabilities must be checked with actual devices.
+- Existing Render staging remains on older branch `feature/thanabunyapat-online`; Render service live config has autoDeploy enabled even though repository `render.yaml` has it off. Postgres Free expires 2026-12-06; backup restoration and dedicated DB isolation unverified. **Do not deploy, migrate, test against existing Render data or touch main.**
+
+**Priorities still open**:
+
+1. Operator-reviewed opening cost valuation, explicit cost policy, cost-at-sale immutable snapshots, returns and adjustments, and fully reconciled COGS/gross profit. Do not present read-only purchase evidence as completed COGS.
+2. Legal-accounting review before tax credit-note issuance, refund/receivable adjustment; financial drafts are not posted.
+3. Customer-history UI pagination, ageing/due-date modeling, report filters and financial export.
+4. Capacity-safe LINE route planning with verified pack/weight/unit semantics and delivery coordinates; real LINE webhook test.
+5. Real BLE 58 mm and A4 printer tests on supported devices; browser simulation alone is insufficient.
+6. Separate disposable staging DB, proven backup/restore, branch alignment and verified Render health before staging deploy. No production deployment.
+
+Final CI must be checked against the final branch HEAD after any documentation commit; never use an older green run to claim the current HEAD passed.
