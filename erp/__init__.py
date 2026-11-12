@@ -521,4 +521,9 @@ def create_app(config=None):
 
     app.register_blueprint(purchasing_bp)
 
+    # Trace purchase-cost evidence without inventing historical COGS or profit.
+    from .cost_evidence import bp as cost_evidence_bp
+
+    app.register_blueprint(cost_evidence_bp)
+
     return app
