@@ -515,6 +515,25 @@ document.addEventListener('click',async event=>{
   state.quoteSelected=updated;warn('อัปเดตสถานะใบเสนอราคาแล้ว');await refresh();return;
  }
  if(btn.dataset.quoteDetail){state.quoteSelected=await api(`/api/quotations/${Number(btn.dataset.quoteDetail)}`);render();return;}
+  if(btn.dataset.returnLoad){
+   const saleId=Number($('return-sale-id')?.value);
+   if(!Number.isInteger(saleId)||saleId<1)throw Error('กรุณาระบุเลขบิลขาย');
+   state.returnEligible=await api(`/api/returns/sales/${saleId}/eligible`);
+   state.returnLines=[];state.returnSelected=null;state.returnReason='';render();return;
+  }
+  if(btn.hasAttribute('data-return-remove')){state.returnLines.splice(Number(btn.dataset.returnRemove),1);render();return;}
+  if(btn.dataset.returnDetail){state.returnSelected=await api(`/api/returns/${Number(btn.dataset.returnDetail)}`);render();return;}
+  if(btn.dataset.returnMore&&state.returnsCursor){
+   const page=await api(`/api/returns?before=${state.returnsCursor}`);
+   state.returns.push(...page.items);state.returnsCursor=page.next_before;render();return;
+  }
+  if(btn.dataset.returnReject){
+   const note=$('return-inspect-form')?.elements.namedItem('inspection_note')?.value.trim();
+   if(!note)throw Error('กรุณากรอกเหตุผลการไม่รับคืน');
+   const result=await api(`/api/returns/${Number(btn.dataset.returnReject)}/reject`,{method:'POST',body:{inspection_note:note}});
+   state.returnSelected=await api(`/api/returns/${result.id}`);
+   warn('บันทึกการปฏิเสธรับคืนแล้ว');await refresh();return;
+  }
  if(btn.dataset.salesFilter){state.salesOutstanding=btn.dataset.salesFilter==='open';await refresh();return;}
  if(btn.hasAttribute('data-sales-more')&&state.salesCursor){
   const page=await api(`/api/online/sales?outstanding=${state.salesOutstanding?'1':'0'}&before=${state.salesCursor}`);
