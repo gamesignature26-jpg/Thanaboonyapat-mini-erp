@@ -9,7 +9,7 @@ import hashlib
 import json
 from datetime import UTC, datetime
 
-from flask import Blueprint, abort, g, request
+from flask import Blueprint, abort, g, render_template, request
 from sqlalchemy import CheckConstraint, UniqueConstraint, func
 
 from . import data, integer, roles, text
@@ -238,6 +238,12 @@ def list_returns():
 @roles("sales", "warehouse", "accountant")
 def get_return(return_id):
     return _detail(db.get_or_404(ReturnIntake, return_id))
+
+
+@bp.get("/api/returns/<int:return_id>/print")
+@roles("sales", "warehouse", "accountant")
+def print_return(return_id):
+    return render_template("return_intake_print.html", record=_detail(db.get_or_404(ReturnIntake, return_id)))
 
 
 @bp.post("/api/returns/<int:return_id>/inspect")
