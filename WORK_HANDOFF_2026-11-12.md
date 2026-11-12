@@ -4,8 +4,8 @@ Updated: 2026-11-12 (Asia/Bangkok)
 ## Source of truth
 - Repo: https://github.com/gamesignature26-jpg/Thanaboonyapat-mini-erp
 - Current development branch: `feature/flow-loyverse-additions-20261112`
-- Last fully validated code commit (prior to docs and cleanup): `91ad03407ebf15d361058578c2a050acd89b1288`
-- Passing GitHub Actions (code + browser): https://github.com/gamesignature26-jpg/Thanaboonyapat-mini-erp/actions/runs/43083722162
+- Last fully validated return-intake code commit: `7e968f8c649d032caded9ac9caabe6a85f9ffb79`
+- Passing GitHub Actions (code + browser): https://github.com/gamesignature26-jpg/Thanaboonyapat-mini-erp/actions/runs/43185938399
 - Original branch kept unchanged: `feature/thanabunyapat-online`; production branch `main` must not be modified or merged.
 - Previous README/HANDOFF.md may describe an older MVP; inspect actual branch code before deciding whether features are absent.
 
@@ -32,12 +32,15 @@ Continue adding missing FlowAccount-like accounting/document functions and Loyve
 - Added `erp/billing_previews.py` and `erp/templates/billing_preview.html`: read-only customer billing view/print from existing Sale (not legally issued). Added Sales-page print link, `tests/test_billing_previews.py` and browser smoke check.
 - Last verified **code** CI pass: https://github.com/gamesignature26-jpg/Thanaboonyapat-mini-erp/actions/runs/43083722162 (commit `91ad03407ebf15d361058578c2a050acd89b1288`). Browser diagnostic cleanup and docs revisions are later commits; check latest CI.
 - Render review: selected confirmed workspace `Gamesignature26's workspace`; staging web service is `thanabunyapat-erp-staging-c8km`, still follows original `feature/thanabunyapat-online`; Postgres `thanabunyapat-erp-test` is Free with expiry date 2026-12-06. No verified backup restore, so **no Deploy**, no Render migrations and no production changes.
-- Next: real versioned quote revisions and external customer approval; formal multi-sale billing note workflow; return/credit-note drafts; supplier purchasing, receiving and COGS. Do not confuse the new billing preview with a formal billing note.
+- Added `erp/return_intake.py`, migration `migrations/versions/8ac4b7e0d221_return_intake.py`, `erp/templates/return_intake_print.html`, return menu/actions in `erp/static/online/app.js`, test suite `tests/test_return_intake.py` and mobile UI smoke. Return drafts are idempotent, warehouse-only inspection records condition/actor, only resellable returns restock with a positive StockMovement; overlapping returns cannot exceed sold quantities.
+- **This is NOT a tax credit note/refund**. Sale.total, Sale.paid, Payment, IssuedDocument and outstanding receivables are not modified. Damaged returns are recorded but not restocked. Read `RETURN_INTAKE.md` for exact contract and limits.
+- Latest full CI PASS for code including return print/mobile flow: https://github.com/gamesignature26-jpg/Thanaboonyapat-mini-erp/actions/runs/43185938399 (SHA `7e968f8c649d032caded9ac9caabe6a85f9ffb79`). Documentation-only follow-up commits may have newer CI checks.
+- Next: legally reviewed return financial adjustments and tax credit-note drafts, purchasing/suppliers and true COGS, formal multi-sale billing notes, real quote revisions/approvals. Never confuse physical return intake with a credit note.
 
 ## Immediate next work (in priority order)
 1. Re-audit actual routes, models, templates, JS and tests to prevent duplicate features and identify incomplete implementations.
 2. Review the new **staff-recorded** quote acceptance and conversion code (already implemented) and add formal quote revisions/customer acceptance evidence and multi-sale billing-note issuance only after document/business rules are approved. Never bypass stock/price checks when converting a quote. Do **not** misuse `IssuedDocument` tax invoice/receipt semantics. Draft numbers must be separate from legally issued document numbers. New states must have explicit validation, auth and immutable snapshots where appropriate.
-3. Implement return/credit-note *draft* workflow, including safe stock-reversal design. Do not create or issue legally valid tax credit notes without verified Thai tax/accounting requirements and explicit review.
+3. Physical return draft/inspection with guarded resellable stock restock is already implemented. Next add a **separately approved financial credit-note draft** with review of Thai tax rules, VAT mode, payment reconciliation and receivables; do not reverse financial ledgers automatically when warehouse receives goods.
 4. Add purchasing/suppliers, stock receiving, cost/COGS support and per-order gross margin when data model permits. Never label sales minus recorded expenses as net profit.
 5. Improve POS customer lookup selection/search, customer history paging, and outstanding report paging; fix gaps without removing old UI.
 6. Test receipt and 58mm Bluetooth integration on actual supported hardware (BLE vs classic SPP vs browser/platform compatibility). Do not claim universal Web Bluetooth or actual print success based only on simulation.
