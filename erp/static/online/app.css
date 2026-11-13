@@ -352,6 +352,8 @@ td.num small { display: block; white-space: nowrap; }
 #printer-dialog::backdrop { background: #152f4270; }
 #printer-dialog h2 { margin: 0; }
 #printer-status { padding: 9px; background: var(--accent-soft); }
+.printer-guide { padding: 10px; border-inline-start: 3px solid var(--accent); background: #f4f8f9; color: var(--ink); }
+.printer-toggle { display: flex; align-items: center; gap: 7px; margin: 10px 0 15px; }
 .invoice-details { margin-top: 14px; }
 .invoice-details summary { cursor: pointer; color: var(--accent); font-weight: 700; }
 .invoice-details form { margin-top: 12px; }
