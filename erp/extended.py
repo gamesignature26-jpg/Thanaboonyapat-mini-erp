@@ -26,6 +26,23 @@ MAX_XLSX = 2 * 1024 * 1024
 MAX_ROWS = 1000
 
 
+CUSTOMER_XLSX_HEADERS = {
+    "name": {"name", "customer name", "customer_name", "ชื่อ", "ชื่อลูกค้า", "ชื่อร้าน", "ชื่อร้านค้า", "ลูกค้า"},
+    "address": {"address", "customer address", "customer_address", "ที่อยู่", "ที่อยู่ลูกค้า", "ที่อยู่จัดส่ง"},
+    "tax_id": {
+        "tax id",
+        "tax_id",
+        "taxid",
+        "เลขผู้เสียภาษี",
+        "เลขผู้เสียภาษีอากร",
+        "เลขประจำตัวผู้เสียภาษี",
+        "เลขประจำตัวผู้เสียภาษีอากร",
+        "เลขผู้เสียภาษี 13 หลัก",
+        "เลขประจำตัวผู้เสียภาษี 13 หลัก",
+    },
+}
+
+
 def now():
     return datetime.now(UTC)
 
@@ -459,6 +476,24 @@ def _cell_string(value, maxlen, required=True):
     return value.strip()
 
 
+def _customer_header_positions(header):
+    """Return canonical customer columns for supported Thai/English XLSX templates."""
+    if not isinstance(header, tuple) or len(header) != 3:
+        return None
+    normalized = []
+    for value in header:
+        if not isinstance(value, str):
+            return None
+        normalized.append(" ".join(value.lstrip("\ufeff").replace("_", " ").replace("-", " ").split()).casefold())
+    positions = {}
+    for index, value in enumerate(normalized):
+        matches = [field for field, aliases in CUSTOMER_XLSX_HEADERS.items() if value in aliases]
+        if len(matches) != 1 or matches[0] in positions:
+            return None
+        positions[matches[0]] = index
+    return positions if set(positions) == {"name", "address", "tax_id"} else None
+
+
 @bp.post("/api/extended/excel/<string:entity>/import")
 @roles()
 def import_excel(entity):
@@ -484,14 +519,13 @@ def import_excel(entity):
         ws = wb.active
         if (ws.max_column or 0) > 4 or (ws.max_row or 0) > MAX_ROWS + 1:
             abort(413, "Excel worksheet exceeds row or column limits")
-        accepted = (
-            (("sku", "name", "price"), ("sku", "name", "price", "stock"))
-            if entity == "products"
-            else (("name", "address", "tax_id"),)
-        )
         rows = ws.iter_rows(values_only=True)
         header = next(rows, None)
-        if header is None or tuple(header) not in accepted:
+        accepted = (("sku", "name", "price"), ("sku", "name", "price", "stock"))
+        customer_positions = _customer_header_positions(tuple(header)) if header is not None else None
+        if header is None or (entity == "products" and tuple(header) not in accepted) or (
+            entity == "customers" and customer_positions is None
+        ):
             abort(400, f"Unexpected XLSX headers for {entity}")
         stock_column = entity == "products" and len(header) == 4
         added = 0
@@ -525,8 +559,9 @@ def import_excel(entity):
                         )
                     )
             else:
-                name, address = _cell_string(values[0], 200), _cell_string(values[1], 1000)
-                tax_id = values[2] or None
+                name = _cell_string(values[customer_positions["name"]], 200)
+                address = _cell_string(values[customer_positions["address"]], 1000)
+                tax_id = values[customer_positions["tax_id"]] or None
                 if tax_id is not None and not _digits13(tax_id):
                     abort(400, f"Invalid customer tax ID at row {i}: preserve as text")
                 key = (name, address, tax_id)

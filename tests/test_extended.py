@@ -276,6 +276,30 @@ def test_excel_import_export_and_formula_rejection(client, app):
     assert forbidden.status_code == 403
 
 
+def test_customer_excel_import_accepts_common_thai_headers(client, app):
+    token = login(client)
+    workbook = make_xlsx(
+        [
+            ("ชื่อลูกค้า", "ที่อยู่จัดส่ง", "เลขประจำตัวผู้เสียภาษี"),
+            ("ร้านทดสอบ ภาษาไทย", "99 ถนนสุขุมวิท สมุทรปราการ", "1234567890123"),
+        ]
+    )
+
+    result = client.post(
+        "/api/extended/excel/customers/import",
+        data={"file": (workbook, "customers-th.xlsx")},
+        content_type="multipart/form-data",
+        headers={"X-CSRFToken": token},
+    )
+
+    assert result.status_code == 201
+    assert result.json == {"entity": "customers", "imported": 1}
+    with app.app_context():
+        customer = db.session.scalar(db.select(Customer).where(Customer.name == "ร้านทดสอบ ภาษาไทย"))
+        assert customer.address == "99 ถนนสุขุมวิท สมุทรปราการ"
+        assert customer.tax_id == "1234567890123"
+
+
 def test_product_images_owner_or_warehouse_only(client, app, seeded):
     owner, pid, _ = seeded
     image = Image.new("RGB", (80, 50), (128, 128, 128))
