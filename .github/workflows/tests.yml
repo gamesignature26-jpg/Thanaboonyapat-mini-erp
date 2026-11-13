@@ -53,3 +53,23 @@ jobs:
         with:
           name: ui-operations-mobile
           path: ui-operations-mobile.png
+  android-test:
+    name: Android test APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+      - run: gradle -p android-app :app:testDebugUnitTest :app:assembleDebug
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: thanabunyapat-erp-debug-apk
+          path: android-app/app/build/outputs/apk/debug/app-debug.apk
