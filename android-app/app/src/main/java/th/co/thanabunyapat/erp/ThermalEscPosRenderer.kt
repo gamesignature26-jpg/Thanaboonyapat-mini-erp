@@ -34,11 +34,11 @@ object ThermalEscPosRenderer {
         }
         rows.forEachIndexed { index, row -> canvas.drawText(row, 8f, 21f + index * lineHeight, paint) }
 
-        val output = ByteArrayOutputStream().apply { write(byteArrayOf(0x1b, 0x40)) }
+        val output = ByteArrayOutputStream().apply { write(EscPosProtocol.initialise()) }
         val stride = width / 8
         for (top in 0 until bitmap.height step 96) {
             val height = minOf(96, bitmap.height - top)
-            output.write(byteArrayOf(0x1d, 0x76, 0x30, 0x00, stride.toByte(), 0x00, height.toByte(), 0x00))
+            output.write(EscPosProtocol.rasterHeader(stride, height))
             for (y in top until top + height) {
                 for (byteX in 0 until stride) {
                     var value = 0
@@ -49,7 +49,7 @@ object ThermalEscPosRenderer {
                 }
             }
         }
-        output.write(byteArrayOf(10, 10, 10))
+        output.write(EscPosProtocol.feed())
         bitmap.recycle()
         return output.toByteArray()
     }
