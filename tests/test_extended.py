@@ -262,6 +262,11 @@ def test_excel_import_export_and_formula_rejection(client, app):
     with app.app_context():
         assert db.session.query(Product).count() == 2
     staff = login(client, "sales")
+    customer_export = client.get("/api/extended/excel/customers")
+    assert customer_export.status_code == 200
+    customer_book = load_workbook(BytesIO(customer_export.data), read_only=True)
+    assert next(iter(customer_book.active.values)) == ("name", "address", "tax_id")
+    customer_book.close()
     forbidden = client.post(
         "/api/extended/excel/products/import",
         data={"file": (make_xlsx([("sku", "name", "price")]), "bad.xlsx")},

@@ -422,10 +422,12 @@ def _sanitized(value):
 
 
 @bp.get("/api/extended/excel/<string:entity>")
-@roles("accountant")
+@roles("sales", "accountant")
 def export_excel(entity):
     if entity not in ("products", "customers"):
         abort(404)
+    if entity == "products" and g.user.role not in ("admin", "accountant"):
+        abort(403)
     wb = Workbook(write_only=True)
     ws = wb.create_sheet(title=entity)
     if entity == "products":
