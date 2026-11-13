@@ -523,8 +523,10 @@ def import_excel(entity):
         header = next(rows, None)
         accepted = (("sku", "name", "price"), ("sku", "name", "price", "stock"))
         customer_positions = _customer_header_positions(tuple(header)) if header is not None else None
-        if header is None or (entity == "products" and tuple(header) not in accepted) or (
-            entity == "customers" and customer_positions is None
+        if (
+            header is None
+            or (entity == "products" and tuple(header) not in accepted)
+            or (entity == "customers" and customer_positions is None)
         ):
             abort(400, f"Unexpected XLSX headers for {entity}")
         stock_column = entity == "products" and len(header) == 4
