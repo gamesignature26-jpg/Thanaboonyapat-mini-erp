@@ -109,3 +109,10 @@ Read `requirements.txt`, `.github/workflows/tests.yml`, `tests/conftest.py`, `re
 6. Separate disposable staging DB, proven backup/restore, branch alignment and verified Render health before staging deploy. No production deployment.
 
 Final CI must be checked against the final branch HEAD after any documentation commit; never use an older green run to claim the current HEAD passed.
+
+
+## Continuation: printer connection profiles (2026-11-13)
+
+- Added editable per-browser printer profile UI: name, model list, receipt/bill toggle, BLE UUID inputs, disconnect and test-print action. Supports generic BLE/ESC-POS 58 mm, Bluetooth Classic generic, Star, Epson, Sunmi, Posiflex, XPrinter, GP models, A4 browser printing and a custom model path.
+- The UI explicitly distinguishes browser BLE from Bluetooth Classic, USB and LAN. Classic/USB/LAN models require a separately implemented Print Bridge or manufacturer application; the application does not claim these paths work directly in a browser.
+- Added mobile browser smoke assertions for the profile controls. No migrations, financial data, sale behavior, document numbering or stock behavior changed. Automated tests are not proof of real-device printing, Thai glyph quality, or compatibility with the pictured printer.
