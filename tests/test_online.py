@@ -2,7 +2,7 @@
 
 from conftest import login, post
 
-from erp.models import Product, Sale, db
+from erp.models import Product, Sale, StockMovement, db
 from erp.online import OnlineExpense, OnlineOrder
 
 
@@ -59,6 +59,56 @@ def test_pos_sale_is_atomic_and_idempotent(client, app, seeded):
         assert db.session.get(Sale, first.json["id"]).paid == 214
         assert db.session.query(OnlineOrder).count() == 1
     assert client.get("/api/online/dashboard").json["receivable"] == "0.00"
+
+
+def test_owner_can_record_negative_stock_sale_only_with_a_reason(client, app, seeded):
+    token, pid, cid = seeded
+    body = order_body(pid, cid, "test-negative-stock-override-123456")
+    body["lines"] = [{"product_id": pid, "quantity": 12}]
+
+    assert post(client, token, "/api/online/orders", body).status_code == 409
+    assert (
+        post(
+            client,
+            token,
+            "/api/online/orders",
+            {**body, "negative_stock_override": True},
+        ).status_code
+        == 400
+    )
+
+    response = post(
+        client,
+        token,
+        "/api/online/orders",
+        {
+            **body,
+            "negative_stock_override": True,
+            "negative_stock_reason": "สินค้ากำลังส่งถึง ตรวจนับหลังออกบิล",
+        },
+    )
+    assert response.status_code == 201
+    with app.app_context():
+        assert db.session.get(Product, pid).stock == -2
+        movement = db.session.scalar(db.select(StockMovement).where(StockMovement.sale_id == response.json["id"]))
+        assert "Negative stock override" in movement.reason
+        assert movement.actor_id == 1
+
+    sales_token = login(client, "sales")
+    assert (
+        post(
+            client,
+            sales_token,
+            "/api/online/orders",
+            {
+                **body,
+                "idempotency_key": "test-negative-stock-staff-denied-123456",
+                "negative_stock_override": True,
+                "negative_stock_reason": "Not authorized",
+            },
+        ).status_code
+        == 403
+    )
 
 
 def test_wholesale_delivery_receivable_payment_and_expense(client, app, seeded):

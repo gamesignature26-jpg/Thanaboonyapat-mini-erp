@@ -29,6 +29,7 @@ function field(label,name,type='text',value='',more=''){return `<div class="fiel
 function customerSelect(name='customer_id',selected=''){return `<div class="field"><label>ลูกค้า<select name="${esc(name)}" required><option value="">เลือกลูกค้า</option>${state.customers.map(c=>opt(c.id,c.name,selected)).join('')}</select></label>${state.customers.length?'':'<small>เพิ่มลูกค้าจากเมนู “ลูกค้า” ก่อนบันทึกการขาย</small>'}</div>`;}
 function methodSelect(selected='cash'){return `<div class="field"><label>วิธีชำระเงิน<select name="method">${opt('cash','เงินสด',selected)}${opt('transfer','โอนเงิน',selected)}${opt('credit','ขายเชื่อ / ค้างชำระ',selected)}</select></label></div>`;}
 function productSelect(name='product_id'){return `<select name="${name}" required><option value="">เลือกสินค้า</option>${state.products.map(p=>opt(p.id,`${p.name} • เหลือ ${p.stock}`)).join('')}</select>`;}
+function negativeStockApproval(){return state.user.role==='admin'?`<fieldset class="small-note"><legend>สต๊อกติดลบ (เจ้าของระบบ)</legend><label><input type="checkbox" name="negative_stock_override"> อนุญาตให้ออกบิลแม้สต๊อกไม่พอ</label>${field('เหตุผลการอนุมัติสต๊อกติดลบ','negative_stock_reason','text','','maxlength="150"')}</fieldset>`:'';}
 async function api(path,options={}){
  const method=options.method||'GET';const headers={'Accept':'application/json'};
  if(method!=='GET'){headers['Content-Type']='application/json';if(!state.csrf)await getCsrf();headers['X-CSRFToken']=state.csrf;}
@@ -208,7 +209,7 @@ function pos(){
   const photo=state.imageIds.includes(product.id)
    ? `<img class="product-photo" src="/api/extended/products/${product.id}/image" alt="">` : '';
   const marker=state.posPrices.has(product.id)?'<small>ราคาพิเศษลูกค้า</small>':'';
-  return `<button type="button" class="product" data-search-text="${esc(product.name+' '+product.sku)}" data-add="${product.id}" ${product.stock<=0?'disabled':''}>${photo}<b>${esc(product.name)}</b><small>${esc(product.sku)} · สต๊อก ${product.stock}</small><strong>${fmt(posUnitPrice(product))}</strong>${marker}</button>`;
+  return `<button type="button" class="product" data-search-text="${esc(product.name+' '+product.sku)}" data-add="${product.id}" ${product.stock<=0&&state.user.role!=='admin'?'disabled':''}>${photo}<b>${esc(product.name)}</b><small>${esc(product.sku)} · สต๊อก ${product.stock}</small><strong>${fmt(posUnitPrice(product))}</strong>${marker}</button>`;
  }).join('');
  const lines=entries.map(({product,quantity})=>
   `<div class="line"><div><b>${esc(product.name)}</b><small> ${fmt(posUnitPrice(product))} × ${quantity}</small></div>
@@ -219,7 +220,7 @@ function pos(){
  <div class="products" data-search-list="products">${products||'<p class="empty">ยังไม่มีสินค้า เพิ่มสินค้าได้จากเมนูสต๊อก</p>'}</div>
  ${products?'<p class="empty" id="no-match-products" role="status" hidden>ไม่พบสินค้า ลองใช้ชื่อหรือรหัสอื่น</p>':''}</section>
  <section class="card cart" id="pos-cart" tabindex="-1"><h2>รายการขาย <span class="count">${entries.reduce((sum,item)=>sum+item.quantity,0)} หน่วย</span></h2>${lines||'<div class="empty">ยังไม่มีสินค้าในตะกร้า</div>'}
- <form id="pos-form">${customerSelect('customer_id',state.posCustomer)}${methodSelect(state.posMethod)}${vatModeSelect(state.posVatMode)}
+ <form id="pos-form">${customerSelect('customer_id',state.posCustomer)}${methodSelect(state.posMethod)}${vatModeSelect(state.posVatMode)}${negativeStockApproval()}
  <div class="summary">${vatSummary(totals)}</div>
  <button class="btn block" ${!entries.length||!state.posPriceReady?'disabled':''}>บันทึกการขายและตัดสต๊อก</button>
  <p class="small-note">รูปแบบ VAT ใช้กับราคาสินค้าที่แสดง รวมถึงราคาพิเศษ</p></form>
@@ -429,6 +430,10 @@ async function confirmSale(kind,form){
  const lines=kind==='pos'?[...state.cart].filter(([id,q])=>q>0).map(([id,q])=>({product_id:Number(id),quantity:q})):state.wh.map(x=>({...x}));
  if(!lines.length)throw Error('กรุณาเลือกสินค้าก่อน');
  const body={kind,vat_price_mode:v.vat_price_mode,customer_id:Number(v.customer_id),lines,method:v.method,delivery_mode:kind==='pos'?'pickup':v.delivery_mode};
+ if(v.negative_stock_override==='on'){
+  if(!v.negative_stock_reason?.trim())throw Error('กรุณาระบุเหตุผลการอนุมัติสต๊อกติดลบ');
+  body.negative_stock_override=true;body.negative_stock_reason=v.negative_stock_reason.trim();
+ }
  if(kind==='pos')body.expected_total=(posTotals().total/100).toFixed(2);
  if(kind==='wholesale'){
   const entered=whEntered()-Math.round(num(v.discount)*100)+(v.delivery_mode==='pickup'?0:Math.round(num(v.shipping_fee)*100));
@@ -612,7 +617,7 @@ async function send(form){if(state.busy)return;state.busy=true;const submit=form
   state.quoteLines=[];state.quoteSelected=await api(`/api/quotations/${result.id}`);
   warn(`บันทึกร่าง ${result.number} แล้ว`);await refresh();
  }
- else if(id==='wh-add-form'){const p=state.products.find(x=>x.id===Number(v.product_id));const qty=Number(v.quantity);const price=Number(v.unit_price);if(!p||!Number.isInteger(qty)||qty<1||qty>p.stock||!Number.isFinite(price)||price<=0)throw Error('ตรวจสอบสินค้า จำนวนและราคาขายส่ง');const found=state.wh.find(x=>x.product_id===p.id);if(found)throw Error('รายการสินค้าซ้ำ โปรดลบรายการเดิมก่อน');state.wh.push({product_id:p.id,quantity:qty,unit_price:moneyInput(price)});render();}
+ else if(id==='wh-add-form'){const p=state.products.find(x=>x.id===Number(v.product_id));const qty=Number(v.quantity);const price=Number(v.unit_price);if(!p||!Number.isInteger(qty)||qty<1||(state.user.role!=='admin'&&qty>p.stock)||!Number.isFinite(price)||price<=0)throw Error('ตรวจสอบสินค้า จำนวนและราคาขายส่ง');const found=state.wh.find(x=>x.product_id===p.id);if(found)throw Error('รายการสินค้าซ้ำ โปรดลบรายการเดิมก่อน');state.wh.push({product_id:p.id,quantity:qty,unit_price:moneyInput(price)});render();}
  else if(id==='product-form'){await api('/products',{method:'POST',body:{sku:v.sku,name:v.name,price:moneyInput(v.price)}});warn('เพิ่มสินค้าแล้ว');await refresh();}
  else if(id==='stock-form'){await api('/stock/adjustments',{method:'POST',body:{product_id:Number(v.product_id),delta:Number(v.delta),reason:v.reason}});warn('ปรับสต๊อกแล้ว');await refresh();}
  else if(id==='customer-form'){await api('/customers',{method:'POST',body:{name:v.name,address:v.address,tax_id:v.tax_id||null}});warn('เพิ่มลูกค้าแล้ว');await refresh();}
@@ -731,7 +736,7 @@ document.addEventListener('click',async event=>{
  if(btn.id==='show-forgot'){showForgot();return;}
  if(btn.id==='show-login'){showLogin();return;}
  if(btn.id==='logout'){await api('/auth/logout',{method:'POST',body:{}});state.user=null;state.csrf=null;state.search={};state.cart.clear();state.wh=[];state.quoteLines=[];state.quotations=[];state.quoteSelected=null;state.returns=[];state.returnEligible=null;state.returnLines=[];state.returnSelected=null;state.returnReason='';state.purchases=[];state.suppliers=[];state.purchaseLines=[];state.purchaseSelected=null;state.purchaseCursor=null;state.billingBatches=[];state.billingCursor=null;state.billingSelected=null;state.billingCustomerId=null;state.billingEligible=[];state.billingEligibleCursor=null;state.posCustomer=0;state.posPrices.clear();state.posPriceReady=false;state.posMethod='cash';state.posVatMode='exclusive';state.lastSale=null;window.erpPrinter.disconnect();showLogin();return;}
- if(btn.dataset.add){const id=Number(btn.dataset.add);const p=state.products.find(p=>p.id===id);if(!p)return;const qty=state.cart.get(id)||0;if(qty>=p.stock)throw Error('สินค้าไม่พอ');state.cart.set(id,qty+1);render();return;}
+ if(btn.dataset.add){const id=Number(btn.dataset.add);const p=state.products.find(p=>p.id===id);if(!p)return;const qty=state.cart.get(id)||0;if(state.user.role!=='admin'&&qty>=p.stock)throw Error('สินค้าไม่พอ');state.cart.set(id,qty+1);render();return;}
  if(btn.dataset.dec){const id=Number(btn.dataset.dec),qty=(state.cart.get(id)||0)-1;if(qty<=0)state.cart.delete(id);else state.cart.set(id,qty);render();return;}
  if(btn.dataset.whdel!==undefined){state.wh.splice(Number(btn.dataset.whdel),1);render();return;}
  if(btn.dataset.next){await api(`/api/online/orders/${Number(btn.dataset.next)}/advance`,{method:'POST',body:{}});warn('อัปเดตสถานะจัดส่งแล้ว');await refresh();return;}

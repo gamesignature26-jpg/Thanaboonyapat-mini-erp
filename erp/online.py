@@ -138,6 +138,11 @@ def config():
 @roles("sales")
 def create_order(body_override=None, before_commit=None):
     body = data() if body_override is None else body_override
+    negative_override = body.get("negative_stock_override", False)
+    if type(negative_override) is not bool:
+        abort(400, "Invalid negative stock override")
+    if negative_override and g.user.role != "admin":
+        abort(403)
     key = text(body, "idempotency_key", 80)
     request_hash = hashlib.sha256(
         json.dumps(body, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
@@ -208,11 +213,16 @@ def create_order(body_override=None, before_commit=None):
             )
         )
     }
+    shortfall = any(product.stock < requested[product.id][0] for product in products)
+    if shortfall and not negative_override:
+        first_short = next(product for product in products if product.stock < requested[product.id][0])
+        abort(409, f"Insufficient stock for SKU {first_short.sku}")
+    if negative_override and not shortfall:
+        abort(400, "Negative stock override is not needed")
+    negative_reason = text(body, "negative_stock_reason", 150) if shortfall else ""
     subtotal = Decimal("0.00")
     for product in products:
         quantity, offered_price = requested[product.id]
-        if product.stock < quantity:
-            abort(409, f"Insufficient stock for SKU {product.sku}")
         price = special.get(product.id, product.price) if offered_price is None else offered_price
         subtotal += price * quantity
     if discount > subtotal:
@@ -255,7 +265,13 @@ def create_order(body_override=None, before_commit=None):
             )
         )
         db.session.add(
-            StockMovement(product_id=product.id, delta=-qty, reason="Online sale", sale_id=sale.id, actor_id=g.user.id)
+            StockMovement(
+                product_id=product.id,
+                delta=-qty,
+                reason=f"Online sale — Negative stock override: {negative_reason}" if shortfall else "Online sale",
+                sale_id=sale.id,
+                actor_id=g.user.id,
+            )
         )
     order = OnlineOrder(
         sale_id=sale.id,

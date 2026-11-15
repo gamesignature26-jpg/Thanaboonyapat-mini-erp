@@ -22,7 +22,9 @@ class Product(db.Model):
     name = db.Column(db.String(200), nullable=False)
     price = db.Column(db.Numeric(14, 2), nullable=False)
     stock = db.Column(db.Integer, nullable=False, default=0)
-    __table_args__ = (CheckConstraint("price >= 0"), CheckConstraint("stock >= 0"))
+    # Negative balances are permitted only via the owner-approved sale override.
+    # Each override is recorded as a StockMovement, keeping shortages visible.
+    __table_args__ = (CheckConstraint("price >= 0"),)
 
 
 class Customer(db.Model):

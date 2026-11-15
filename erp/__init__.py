@@ -369,6 +369,11 @@ def create_app(config=None):
     @roles("sales")
     def sales():
         body = data()
+        negative_override = body.get("negative_stock_override", False)
+        if type(negative_override) is not bool:
+            abort(400, "Invalid negative stock override")
+        if negative_override and g.user.role != "admin":
+            abort(403)
         customer = db.session.get(Customer, integer(body.get("customer_id")))
         if not customer:
             abort(404)
@@ -418,10 +423,16 @@ def create_app(config=None):
         )
         db.session.add(sale)
         db.session.flush()
+        shortfall = any(p.stock < quantities[p.id] for p in products)
+        reason = ""
+        if shortfall:
+            if not negative_override:
+                abort(409, "Insufficient stock")
+            reason = text(body, "negative_stock_reason", 150)
+        elif negative_override:
+            abort(400, "Negative stock override is not needed")
         for p in products:
             qty = quantities[p.id]
-            if p.stock < qty:
-                abort(409, "Insufficient stock")
             p.stock -= qty
             db.session.add(
                 SaleLine(
@@ -434,7 +445,13 @@ def create_app(config=None):
                 )
             )
             db.session.add(
-                StockMovement(product_id=p.id, delta=-qty, reason="Sale", sale_id=sale.id, actor_id=g.user.id)
+                StockMovement(
+                    product_id=p.id,
+                    delta=-qty,
+                    reason=f"Sale — Negative stock override: {reason}" if shortfall else "Sale",
+                    sale_id=sale.id,
+                    actor_id=g.user.id,
+                )
             )
         db.session.commit()
         return {"id": sale.id, "subtotal": str(sale.subtotal), "vat": str(sale.vat), "total": str(sale.total)}, 201
