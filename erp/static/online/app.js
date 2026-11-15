@@ -397,6 +397,7 @@ function render(){
   {attr:focused.hasAttribute('data-dec')?'data-dec':'data-add',id:focused.dataset.dec||focused.dataset.add,qty:focused.classList.contains('qty-control')}:null;
  const map={dashboard,pos,wholesale,sales,billing_batches:billingBatches,credit_drafts:creditDrafts,quotations,returns:returnIntake,purchases:purchasing,inventory:inventoryWithExtras,customers,expenses,reports,users,prices,settings};
  view.innerHTML=(map[state.view]||dashboard)();
+ if(state.view==='wholesale'&&state.user.role==='admin')$('wh-form')?.insertAdjacentHTML('beforeend',negativeStockApproval());
  if($('quote-status-note'))$('quote-status-note').value=quoteStatusDraft;
  if($('return-reason'))$('return-reason').value=returnReasonDraft;
  if(purchaseDraft&&$('purchase-form'))for(const [name,value] of Object.entries(purchaseDraft)){
