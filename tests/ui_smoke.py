@@ -152,6 +152,11 @@ def main():
             combined.value.get_by_text("ไม่ใช่ใบกำกับภาษี", exact=False).first.wait_for()
             combined.value.close()
             page.get_by_role("button", name="บิลขาย / ลูกหนี้", exact=True).click()
+            with page.expect_popup() as invoice_preview:
+                page.get_by_role("link", name="ตัวอย่างใบกำกับภาษี / พิมพ์", exact=True).first.click()
+            invoice_preview.value.get_by_text("ใบกำกับภาษี (ร่างทดสอบ)", exact=True).wait_for()
+            invoice_preview.value.get_by_role("button", name="พิมพ์เอกสาร", exact=True).wait_for()
+            invoice_preview.value.close()
             page.get_by_role("button", name="รับชำระ", exact=True).click()
             page.get_by_role("button", name="บันทึกรับชำระ", exact=True).click()
             page.get_by_role("button", name="ออกใบเสร็จร่าง", exact=True).click()

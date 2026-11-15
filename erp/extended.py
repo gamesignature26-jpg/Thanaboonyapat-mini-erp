@@ -8,6 +8,7 @@ import hashlib
 import json
 from datetime import UTC, datetime
 from io import BytesIO
+from types import SimpleNamespace
 from zipfile import BadZipFile, ZipFile
 from zoneinfo import ZoneInfo
 
@@ -429,6 +430,25 @@ def print_document(document_id):
         snapshot=snapshot,
         paper=paper,
         issued_local=issued.astimezone(ZoneInfo("Asia/Bangkok")),
+    )
+
+
+@bp.get("/api/extended/sales/<int:sale_id>/tax-invoice-preview")
+@roles("sales", "accountant")
+def tax_invoice_preview(sale_id):
+    """Render a non-persistent tax-invoice layout for review before draft creation."""
+    sale = db.get_or_404(Sale, sale_id)
+    paper = request.args.get("paper", "a4")
+    if paper not in ("a4", "58"):
+        abort(400, "Unsupported paper")
+    profile = db.session.get(CompanyProfile, 1) or CompanyProfile(legal_name="หจก. ธนาบุณยภัทร")
+    previewed_at = now()
+    return render_template(
+        "extended_document.html",
+        document=SimpleNamespace(kind="tax_invoice", number=f"PREVIEW-{sale.id:08d}"),
+        snapshot=_snapshot(sale, profile),
+        paper=paper,
+        issued_local=previewed_at.astimezone(ZoneInfo("Asia/Bangkok")),
     )
 
 

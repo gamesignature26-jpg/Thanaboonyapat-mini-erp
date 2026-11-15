@@ -215,6 +215,22 @@ def test_tax_invoice_requires_company_and_customer_details(client, app, seeded):
     assert client.get(thermal).status_code == 403
 
 
+def test_tax_invoice_preview_is_read_only_and_printable(client, app, seeded):
+    owner, pid, cid = seeded
+    sale = post(client, owner, "/api/online/orders", make_order(pid, cid, "synthetic-invoice-preview-55555555"))
+
+    preview = client.get(f"/api/extended/sales/{sale.json['id']}/tax-invoice-preview?paper=a4")
+
+    assert preview.status_code == 200
+    assert "text/html" in preview.content_type
+    assert "ใบกำกับภาษี (ร่างทดสอบ)" in preview.data.decode()
+    assert f"PREVIEW-{sale.json['id']:08d}" in preview.data.decode()
+    with app.app_context():
+        assert db.session.query(IssuedDocument).count() == 0
+    login(client, "warehouse")
+    assert client.get(f"/api/extended/sales/{sale.json['id']}/tax-invoice-preview?paper=a4").status_code == 403
+
+
 def make_xlsx(rows):
     wb = Workbook()
     ws = wb.active
