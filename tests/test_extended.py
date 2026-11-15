@@ -281,7 +281,15 @@ def test_excel_import_export_and_formula_rejection(client, app):
     customer_export = client.get("/api/extended/excel/customers")
     assert customer_export.status_code == 200
     customer_book = load_workbook(BytesIO(customer_export.data), read_only=True)
-    assert next(iter(customer_book.active.values)) == ("name", "address", "tax_id")
+    assert next(iter(customer_book.active.values)) == (
+        "name",
+        "address",
+        "tax_id",
+        "phone",
+        "email",
+        "customer_code",
+        "note",
+    )
     customer_book.close()
     forbidden = client.post(
         "/api/extended/excel/products/import",
@@ -314,6 +322,69 @@ def test_customer_excel_import_accepts_common_thai_headers(client, app):
         customer = db.session.scalar(db.select(Customer).where(Customer.name == "ร้านทดสอบ ภาษาไทย"))
         assert customer.address == "99 ถนนสุขุมวิท สมุทรปราการ"
         assert customer.tax_id == "1234567890123"
+
+
+def test_customer_excel_import_preserves_legacy_customer_columns(client, app):
+    token = login(client)
+    workbook = make_xlsx(
+        [
+            (
+                "ไอดีลูกค้า",
+                "ชื่อลูกค้า",
+                "อีเมลล์",
+                "โทรศัพท์",
+                "ที่อยู่",
+                "เขต/อำเภอ",
+                "จังหวัด",
+                "รหัสไปรษณีย์",
+                "ประเทศ",
+                "รหัสลูกค้า",
+                "แต้ม",
+                "หมายเหตุ",
+                "เยียมชมครั้งแรก",
+                "เยี่ยมชมล่าสุด",
+                "เข้าชมทั้งหมด",
+                "ยอดจ่ายทั้งหมด",
+            ),
+            (
+                123.0,
+                "ลูกค้านำเข้า",
+                "customer@example.test",
+                812345678.0,
+                "10 ถนนสุขุมวิท",
+                "เมือง",
+                "สมุทรปราการ",
+                10270.0,
+                "ไทย",
+                "C-123",
+                5.0,
+                "ส่งวันศุกร์",
+                "2026-01-02",
+                "2026-11-10",
+                7.0,
+                1500.5,
+            ),
+        ]
+    )
+
+    result = client.post(
+        "/api/extended/excel/customers/import",
+        data={"file": (workbook, "legacy-customers.xlsx")},
+        content_type="multipart/form-data",
+        headers={"X-CSRFToken": token},
+    )
+
+    assert result.status_code == 201
+    with app.app_context():
+        customer = db.session.scalar(db.select(Customer).where(Customer.external_code == "C-123"))
+        assert customer.name == "ลูกค้านำเข้า"
+        assert customer.phone == "812345678"
+        assert customer.email == "customer@example.test"
+        assert customer.address == "10 ถนนสุขุมวิท, เมือง, สมุทรปราการ, 10270, ไทย"
+        assert customer.note == "ส่งวันศุกร์"
+        assert customer.source_customer_id == "123"
+        assert '"source_id":"123"' in customer.import_metadata
+        assert '"total_spent":"1500.5"' in customer.import_metadata
 
 
 def test_product_images_owner_or_warehouse_only(client, app, seeded):

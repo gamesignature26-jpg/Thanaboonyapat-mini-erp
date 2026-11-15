@@ -29,6 +29,12 @@ function field(label,name,type='text',value='',more=''){return `<div class="fiel
 function customerSelect(name='customer_id',selected=''){return `<div class="field"><label>ลูกค้า<select name="${esc(name)}" required><option value="">เลือกลูกค้า</option>${state.customers.map(c=>opt(c.id,c.name,selected)).join('')}</select></label>${state.customers.length?'':'<small>เพิ่มลูกค้าจากเมนู “ลูกค้า” ก่อนบันทึกการขาย</small>'}</div>`;}
 function methodSelect(selected='cash'){return `<div class="field"><label>วิธีชำระเงิน<select name="method">${opt('cash','เงินสด',selected)}${opt('transfer','โอนเงิน',selected)}${opt('credit','ขายเชื่อ / ค้างชำระ',selected)}</select></label></div>`;}
 function productSelect(name='product_id'){return `<select name="${name}" required><option value="">เลือกสินค้า</option>${state.products.map(p=>opt(p.id,`${p.name} • เหลือ ${p.stock}`)).join('')}</select>`;}
+function productTile(product,action='add'){
+ const photo=state.imageIds.includes(product.id)?`<img class="product-photo" src="/api/extended/products/${product.id}/image" alt="">`:`<span class="product-placeholder" aria-hidden="true">💧</span>`;
+ const disabled=product.stock<=0&&state.user.role!=='admin';
+ const marker=action==='add'&&state.posPrices.has(product.id)?'<small class="special-price">ราคาพิเศษลูกค้า</small>':'';
+ return `<button type="button" class="product product-tile" data-${action}="${product.id}" data-search-text="${esc(product.name+' '+product.sku)}" ${disabled?'disabled':''}>${photo}<b>${esc(product.name)}</b><small>${esc(product.sku)} · เหลือ ${product.stock}</small><strong>${fmt(action==='add'?posUnitPrice(product):product.price)}</strong>${marker}</button>`;
+}
 function negativeStockApproval(){return state.user.role==='admin'?`<fieldset class="small-note"><legend>สต๊อกติดลบ (เจ้าของระบบ)</legend><label><input type="checkbox" name="negative_stock_override"> อนุญาตให้ออกบิลแม้สต๊อกไม่พอ</label>${field('เหตุผลการอนุมัติสต๊อกติดลบ','negative_stock_reason','text','','maxlength="150"')}</fieldset>`:'';}
 async function api(path,options={}){
  const method=options.method||'GET';const headers={'Accept':'application/json'};
@@ -205,12 +211,7 @@ function pos(){
   .filter(item=>item.product&&item.quantity>0);
  const totals=posTotals();
  const {total}=totals;
- const products=state.products.map(product=>{
-  const photo=state.imageIds.includes(product.id)
-   ? `<img class="product-photo" src="/api/extended/products/${product.id}/image" alt="">` : '';
-  const marker=state.posPrices.has(product.id)?'<small>ราคาพิเศษลูกค้า</small>':'';
-  return `<button type="button" class="product" data-search-text="${esc(product.name+' '+product.sku)}" data-add="${product.id}" ${product.stock<=0&&state.user.role!=='admin'?'disabled':''}>${photo}<b>${esc(product.name)}</b><small>${esc(product.sku)} · สต๊อก ${product.stock}</small><strong>${fmt(posUnitPrice(product))}</strong>${marker}</button>`;
- }).join('');
+ const products=state.products.map(product=>productTile(product)).join('');
  const lines=entries.map(({product,quantity})=>
   `<div class="line"><div><b>${esc(product.name)}</b><small> ${fmt(posUnitPrice(product))} × ${quantity}</small></div>
   <div class="row"><button type="button" class="btn secondary slim qty-control" aria-label="ลดจำนวน ${esc(product.name)}" data-dec="${product.id}">−</button><b>${quantity}</b><button type="button" class="btn secondary slim qty-control" aria-label="เพิ่มจำนวน ${esc(product.name)}" data-add="${product.id}">+</button></div></div>`
@@ -315,7 +316,7 @@ function customers(){
  <div class="tablewrap"><table aria-label="รายชื่อลูกค้า"><tbody data-search-list="customers">${rows}</tbody></table></div>
  ${rows?'<p class="empty" id="no-match-customers" role="status" hidden>ไม่พบลูกค้า ลองใช้ชื่อหรือที่อยู่อื่น</p>':'<p class="empty">ยังไม่มีลูกค้า</p>'}${state.customerHistory?`<section id="customer-purchase-history" tabindex="-1"><h3>ประวัติซื้อ: ${esc(state.customerHistory.customer.name)}</h3><p>ยอดซื้อ ${fmt(state.customerHistory.summary.total_sales)} · รับแล้ว ${fmt(state.customerHistory.summary.total_paid)} · ค้างชำระ ${fmt(state.customerHistory.summary.outstanding)}</p><div class="tablewrap"><table><thead><tr><th>บิล</th><th>วันที่</th><th>ยอดขาย</th><th>ค้างชำระ</th></tr></thead><tbody>${state.customerHistory.items.map(s=>`<tr><td>#${s.id}</td><td>${formatDate(s.date)}</td><td>${fmt(s.total)}</td><td>${fmt(s.balance)}</td></tr>`).join('')||'<tr><td colspan="4">ยังไม่มีประวัติซื้อ</td></tr>'}</tbody></table></div>${state.customerHistory.next_before?'<button type="button" class="btn secondary slim" data-customer-history-more="1">ดูประวัติที่เก่ากว่า</button>':''}</section>`:''}</section>
  <section class="card"><h2>เพิ่มลูกค้า</h2><form id="customer-form">${field('ชื่อร้านค้า / ลูกค้า','name','text','','required maxlength="200"')}${field('ที่อยู่','address','text','','required maxlength="1000"')}${field('เลขผู้เสียภาษี 13 หลัก (ถ้ามี)','tax_id','text','','pattern="[0-9]{13}" maxlength="13"')}<button class="btn">บันทึกลูกค้า</button></form></section>
- <section class="card"><h2>นำเข้ารายชื่อลูกค้าจาก Excel</h2><p>รองรับไฟล์ .xlsx 1 ชีต ไม่เกิน 1,000 รายการ ใช้หัวคอลัมน์ <code>name</code>, <code>address</code>, <code>tax_id</code> เท่านั้น ระบบจะหยุดทั้งไฟล์หากพบรายการซ้ำ เพื่อไม่ให้ข้อมูลลูกค้าบางส่วนถูกนำเข้า</p><form id="customer-excel-form"><input name="file" type="file" accept=".xlsx" required><button class="btn">นำเข้ารายชื่อลูกค้า</button></form><a href="/api/extended/excel/customers">ดาวน์โหลดไฟล์ตัวอย่าง / ส่งออกรายชื่อลูกค้า XLSX</a></section></div>`;
+ <section class="card"><h2>นำเข้ารายชื่อลูกค้าจาก Excel</h2><p>รองรับไฟล์ .xlsx 1 ชีต ไม่เกิน 1,000 รายการ ทั้งไฟล์มาตรฐานและไฟล์รายชื่อลูกค้าเดิม เช่น ชื่อลูกค้า โทรศัพท์ ที่อยู่ รหัสลูกค้า และหมายเหตุ ระบบจะเก็บข้อมูลที่มี และหยุดทั้งไฟล์เมื่อพบข้อมูลซ้ำ</p><form id="customer-excel-form"><input name="file" type="file" accept=".xlsx" required><button class="btn">นำเข้ารายชื่อลูกค้า</button></form><a href="/api/extended/excel/customers">ดาวน์โหลดไฟล์ตัวอย่าง / ส่งออกรายชื่อลูกค้า XLSX</a></section></div>`;
 }
 function expenses(){return `<div class="grid g2"><div class="card"><h2>บันทึกค่าใช้จ่าย</h2><p>ใช้ติดตามรายจ่าย ไม่ใช่ลงบัญชีคู่</p><form id="expense-form">${field('หมวดหมู่','category','text','ขนส่ง','required maxlength="80"')}${field('รายละเอียด','description','text','','required maxlength="250"')}${field('จำนวนเงิน (บาท)','amount','number','','min="0.01" step="0.01" required')}<div class="field"><label>ชำระโดย</label><select name="method">${opt('cash','เงินสด')}${opt('transfer','โอนเงิน')}</select></div><button class="btn">บันทึกรายจ่าย</button></form></div><div class="card"><h2>รายจ่ายล่าสุด</h2><div class="tablewrap"><table><tbody>${state.expenses.map(x=>`<tr><td>#${x.id} ${esc(x.category)}<div class="muted">${esc(x.description)}</div><button class="btn secondary slim" data-op-expense="${x.id}">แนบรูปใบเสร็จ</button></td><td class="num">${fmt(x.amount)}</td></tr>`).join('')}</tbody></table></div></div></div>`;}
 function creditDrafts(){
@@ -398,6 +399,9 @@ function render(){
  const map={dashboard,pos,wholesale,sales,billing_batches:billingBatches,credit_drafts:creditDrafts,quotations,returns:returnIntake,purchases:purchasing,inventory:inventoryWithExtras,customers,expenses,reports,users,prices,settings};
  view.innerHTML=(map[state.view]||dashboard)();
  if(state.view==='wholesale'&&state.user.role==='admin')$('wh-form')?.insertAdjacentHTML('beforeend',negativeStockApproval());
+ if(state.view==='wholesale'&&['admin','sales'].includes(state.user.role)){
+  $('wh-add-form')?.insertAdjacentHTML('beforebegin',`<h3>แตะเลือกสินค้า</h3><p class="small-note">แตะสินค้า แล้วกรอกจำนวนกับราคาก่อนเพิ่มลงออเดอร์</p><div class="products wholesale-products">${state.products.map(product=>productTile(product,'whpick')).join('')||'<p class="empty">ยังไม่มีสินค้า</p>'}</div>`);
+ }
  if($('quote-status-note'))$('quote-status-note').value=quoteStatusDraft;
  if($('return-reason'))$('return-reason').value=returnReasonDraft;
  if(purchaseDraft&&$('purchase-form'))for(const [name,value] of Object.entries(purchaseDraft)){
@@ -662,6 +666,7 @@ document.addEventListener('click',async event=>{
  }
  if(btn.id==='retry-view'){navigate(state.view);return;}
  if(btn.dataset.posJump){const section=$(btn.dataset.posJump);section?.focus({preventScroll:true});section?.scrollIntoView({block:'start'});return;}
+ if(btn.dataset.whpick){const form=$('wh-add-form');const product=state.products.find(p=>p.id===Number(btn.dataset.whpick));if(!form||!product)return;form.elements.product_id.value=String(product.id);form.elements.unit_price.value=moneyInput(product.price);form.elements.quantity.focus();form.scrollIntoView({block:'center',behavior:'smooth'});return;}
  if(btn.dataset.nav){navigate(btn.dataset.nav);return;}
   if(btn.dataset.customerServerSearch){const term=state.search.customers||'';const page=await api('/api/customers/lookup?q='+encodeURIComponent(term)+'&limit=100');state.customerLookupResults=page.items;state.customerHistory=null;render();if(page.next_after)warn('แสดง 100 รายชื่อแรก กรุณาระบุคำค้นให้แคบลง');return;}
   if(btn.dataset.customerClear){state.customerLookupResults=null;state.customerHistory=null;state.search.customers='';render();return;}

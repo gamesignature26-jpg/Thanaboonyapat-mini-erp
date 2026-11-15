@@ -32,6 +32,12 @@ class Customer(db.Model):
     name = db.Column(db.String(200), nullable=False)
     tax_id = db.Column(db.String(13))
     address = db.Column(db.String(1000), nullable=False, default="")
+    phone = db.Column(db.String(30), nullable=False, default="")
+    email = db.Column(db.String(255), nullable=False, default="")
+    external_code = db.Column(db.String(80), nullable=False, default="")
+    source_customer_id = db.Column(db.String(80), nullable=False, default="")
+    note = db.Column(db.String(1000), nullable=False, default="")
+    import_metadata = db.Column(db.Text, nullable=False, default="")
 
 
 class Sale(db.Model):

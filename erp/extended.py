@@ -8,6 +8,7 @@ import hashlib
 import json
 from datetime import UTC, datetime
 from io import BytesIO
+from math import isfinite
 from types import SimpleNamespace
 from zipfile import BadZipFile, ZipFile
 from zoneinfo import ZoneInfo
@@ -41,6 +42,20 @@ CUSTOMER_XLSX_HEADERS = {
         "เลขผู้เสียภาษี 13 หลัก",
         "เลขประจำตัวผู้เสียภาษี 13 หลัก",
     },
+    "phone": {"phone", "telephone", "tel", "โทรศัพท์", "เบอร์โทร", "เบอร์โทรศัพท์"},
+    "email": {"email", "e-mail", "อีเมล", "อีเมลล์"},
+    "external_code": {"customer code", "customer_code", "รหัสลูกค้า"},
+    "note": {"note", "notes", "หมายเหตุ"},
+    "source_id": {"customer id", "customer_id", "ไอดีลูกค้า"},
+    "district": {"district", "เขต/อำเภอ", "อำเภอ", "เขต"},
+    "province": {"province", "จังหวัด"},
+    "postal_code": {"postal code", "postcode", "zip", "รหัสไปรษณีย์"},
+    "country": {"country", "ประเทศ"},
+    "points": {"points", "แต้ม"},
+    "first_visit": {"first visit", "เยียมชมครั้งแรก"},
+    "last_visit": {"last visit", "เยี่ยมชมล่าสุด"},
+    "visit_count": {"visit count", "เข้าชมทั้งหมด"},
+    "total_spent": {"total spent", "ยอดจ่ายทั้งหมด"},
 }
 
 
@@ -473,10 +488,20 @@ def export_excel(entity):
         for p in records:
             ws.append((_sanitized(p.sku), _sanitized(p.name), str(p.price), p.stock))
     else:
-        ws.append(("name", "address", "tax_id"))
+        ws.append(("name", "address", "tax_id", "phone", "email", "customer_code", "note"))
         records = db.session.scalars(db.select(Customer).order_by(Customer.id).execution_options(yield_per=500))
         for c in records:
-            ws.append((_sanitized(c.name), _sanitized(c.address), _sanitized(c.tax_id or "")))
+            ws.append(
+                (
+                    _sanitized(c.name),
+                    _sanitized(c.address),
+                    _sanitized(c.tax_id or ""),
+                    _sanitized(c.phone),
+                    _sanitized(c.email),
+                    _sanitized(c.external_code),
+                    _sanitized(c.note),
+                )
+            )
     buf = BytesIO()
     wb.save(buf)
     buf.seek(0)
@@ -498,7 +523,7 @@ def _cell_string(value, maxlen, required=True):
 
 def _customer_header_positions(header):
     """Return canonical customer columns for supported Thai/English XLSX templates."""
-    if not isinstance(header, tuple) or len(header) != 3:
+    if not isinstance(header, tuple) or not 1 <= len(header) <= 20:
         return None
     normalized = []
     for value in header:
@@ -511,7 +536,66 @@ def _customer_header_positions(header):
         if len(matches) != 1 or matches[0] in positions:
             return None
         positions[matches[0]] = index
-    return positions if set(positions) == {"name", "address", "tax_id"} else None
+    return positions if "name" in positions else None
+
+
+def _import_cell(value, maximum, required=False):
+    if value is None:
+        if required:
+            abort(400, "A required Excel cell is blank")
+        return ""
+    if isinstance(value, str):
+        result = _cell_string(value, maximum, required=required)
+    elif isinstance(value, bool):
+        abort(400, "Invalid Excel cell type")
+    elif isinstance(value, int):
+        result = str(value)
+    elif isinstance(value, float):
+        if not isfinite(value):
+            abort(400, "Invalid Excel numeric text")
+        result = str(int(value)) if value.is_integer() else format(value, "f").rstrip("0").rstrip(".")
+    elif isinstance(value, datetime):
+        result = value.isoformat()
+    else:
+        abort(400, "Invalid Excel cell type")
+    if len(result) > maximum or (required and not result.strip()):
+        abort(400, "Invalid Excel cell text")
+    return result.strip()
+
+
+def _customer_import_values(values, positions):
+    name = _import_cell(values[positions["name"]], 200, required=True)
+    address_parts = [
+        _import_cell(values[positions[field]], 200)
+        for field in ("address", "district", "province", "postal_code", "country")
+        if field in positions
+    ]
+    address = ", ".join(dict.fromkeys(part for part in address_parts if part))
+    if len(address) > 1000:
+        abort(400, "Customer address is too long")
+    tax_id = _import_cell(values[positions["tax_id"]], 13) if "tax_id" in positions else ""
+    if tax_id and not _digits13(tax_id):
+        abort(400, "Invalid customer tax ID: preserve as text")
+    metadata_fields = ("source_id", "points", "first_visit", "last_visit", "visit_count", "total_spent")
+    metadata = {
+        field: _import_cell(values[positions[field]], 255)
+        for field in metadata_fields
+        if field in positions and values[positions[field]] is not None
+    }
+    metadata_json = json.dumps(metadata, ensure_ascii=False, separators=(",", ":"))
+    if len(metadata_json) > 2000:
+        abort(400, "Customer import metadata is too long")
+    return {
+        "name": name,
+        "address": address,
+        "tax_id": tax_id or None,
+        "phone": _import_cell(values[positions["phone"]], 30) if "phone" in positions else "",
+        "email": _import_cell(values[positions["email"]], 255) if "email" in positions else "",
+        "external_code": _import_cell(values[positions["external_code"]], 80) if "external_code" in positions else "",
+        "source_customer_id": _import_cell(values[positions["source_id"]], 80) if "source_id" in positions else "",
+        "note": _import_cell(values[positions["note"]], 1000) if "note" in positions else "",
+        "import_metadata": metadata_json,
+    }
 
 
 @bp.post("/api/extended/excel/<string:entity>/import")
@@ -537,7 +621,8 @@ def import_excel(entity):
         if len(wb.sheetnames) != 1:
             abort(400, "Upload exactly one worksheet")
         ws = wb.active
-        if (ws.max_column or 0) > 4 or (ws.max_row or 0) > MAX_ROWS + 1:
+        max_columns = 4 if entity == "products" else 20
+        if (ws.max_column or 0) > max_columns or (ws.max_row or 0) > MAX_ROWS + 1:
             abort(413, "Excel worksheet exceeds row or column limits")
         rows = ws.iter_rows(values_only=True)
         header = next(rows, None)
@@ -581,23 +666,38 @@ def import_excel(entity):
                         )
                     )
             else:
-                name = _cell_string(values[customer_positions["name"]], 200)
-                address = _cell_string(values[customer_positions["address"]], 1000)
-                tax_id = values[customer_positions["tax_id"]] or None
-                if tax_id is not None and not _digits13(tax_id):
-                    abort(400, f"Invalid customer tax ID at row {i}: preserve as text")
-                key = (name, address, tax_id)
+                customer_values = _customer_import_values(values, customer_positions)
+                key = (
+                    customer_values["source_customer_id"]
+                    or customer_values["external_code"]
+                    or customer_values["name"],
+                    customer_values["address"],
+                    customer_values["tax_id"],
+                )
                 if key in seen:
                     abort(409, f"Duplicate customer at row {i}")
                 seen.add(key)
-                exists = db.session.scalar(
-                    db.select(Customer.id).where(
-                        Customer.name == name, Customer.address == address, Customer.tax_id == tax_id
+                if customer_values["source_customer_id"]:
+                    exists = db.session.scalar(
+                        db.select(Customer.id).where(
+                            Customer.source_customer_id == customer_values["source_customer_id"]
+                        )
                     )
-                )
+                elif customer_values["external_code"]:
+                    exists = db.session.scalar(
+                        db.select(Customer.id).where(Customer.external_code == customer_values["external_code"])
+                    )
+                else:
+                    exists = db.session.scalar(
+                        db.select(Customer.id).where(
+                            Customer.name == customer_values["name"],
+                            Customer.address == customer_values["address"],
+                            Customer.tax_id == customer_values["tax_id"],
+                        )
+                    )
                 if exists:
                     abort(409, f"Customer already exists at row {i}")
-                db.session.add(Customer(name=name, address=address, tax_id=tax_id))
+                db.session.add(Customer(**customer_values))
             added += 1
         if added == 0:
             abort(400, "No rows to import")
