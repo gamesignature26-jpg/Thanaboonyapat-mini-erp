@@ -39,6 +39,10 @@ def test_browser_ui_and_protected_api(client):
     assert "script-src 'self'" in page.headers["Content-Security-Policy"]
     assert client.get("/api/online/dashboard").status_code == 401
     assert client.get("/assets/online/app.js").status_code == 200
+    theme = client.get("/assets/online/app.css")
+    assert theme.status_code == 200
+    assert b"Thanabunyapat signature UI" in theme.data
+    assert b"prefers-reduced-motion" in theme.data
 
 
 def test_pos_sale_is_atomic_and_idempotent(client, app, seeded):
