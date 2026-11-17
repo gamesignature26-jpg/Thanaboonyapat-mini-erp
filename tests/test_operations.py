@@ -273,3 +273,25 @@ def test_line_insufficient_stock_keeps_draft_pending(client, seeded, app):
     )
     assert result.status_code == 409
     assert client.get("/api/operations/line-drafts").json["items"][0]["status"] == "pending"
+
+
+def test_line_thai_order_command_creates_review_only_draft(client, seeded, app):
+    token, pid, cid = seeded
+    assert (
+        post(client, token, "/api/operations/line-senders", {"line_user_id": "U-thai", "customer_id": cid}).status_code
+        == 201
+    )
+    event = {
+        "type": "message",
+        "webhookEventId": "thai-order-1",
+        "source": {"type": "user", "userId": "U-thai"},
+        "message": {"type": "text", "text": "สั่งน้ำ TEST-001:2"},
+    }
+    assert webhook(client, app, [event]).status_code == 200
+    assert webhook(client, app, [event]).status_code == 200
+    drafts = client.get("/api/operations/line-drafts").json["items"]
+    assert len(drafts) == 1
+    assert drafts[0]["status"] == "pending"
+    assert drafts[0]["lines"] == [{"product_id": pid, "quantity": 2}]
+    with app.app_context():
+        assert db.session.get(Product, pid).stock == 10

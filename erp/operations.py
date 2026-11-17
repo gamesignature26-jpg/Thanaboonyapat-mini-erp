@@ -602,15 +602,13 @@ def install_operations(app):
             if db.session.scalar(db.select(LineDraft.id).where(LineDraft.event_id == eid)):
                 continue
             value = message.get("text", "")
-            if (
-                message.get("type") != "text"
-                or not isinstance(value, str)
-                or len(value) > 2000
-                or not value.startswith("ORDER ")
-            ):
+            if message.get("type") != "text" or not isinstance(value, str) or len(value) > 2000:
+                continue
+            prefix = next((p for p in ("ORDER ", "สั่งน้ำ ") if value.startswith(p)), None)
+            if prefix is None:
                 continue
             lines = []
-            for part in value[6:].split():
+            for part in value[len(prefix) :].split():
                 match = re.fullmatch(r"([\w.-]{1,80}):([1-9][0-9]{0,4})", part)
                 if not match:
                     lines = []
